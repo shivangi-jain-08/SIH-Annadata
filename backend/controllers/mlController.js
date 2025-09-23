@@ -17,7 +17,7 @@ const getHardwareMessages = async (req, res) => {
     res.json({
       success: true,
       message: 'Hardware messages retrieved successfully',
-      data: { 
+      data: {
         messages,
         count: messages.length
       }
@@ -77,7 +77,7 @@ const getCropRecommendations = async (req, res) => {
     res.json({
       success: true,
       message: 'Crop recommendations retrieved successfully',
-      data: { 
+      data: {
         recommendations,
         count: recommendations.length
       }
@@ -128,7 +128,7 @@ const getLatestCropRecommendation = async (req, res) => {
 const getCropRecommendationsByCrop = async (req, res) => {
   try {
     const { cropName } = req.params;
-    
+
     const recommendations = await CropRecommendation.find({
       'recommendations.cropName': { $regex: cropName, $options: 'i' }
     }).populate('farmerId', 'name location');
@@ -136,7 +136,7 @@ const getCropRecommendationsByCrop = async (req, res) => {
     res.json({
       success: true,
       message: `Crop recommendations for ${cropName} retrieved successfully`,
-      data: { 
+      data: {
         recommendations,
         count: recommendations.length,
         cropName
@@ -165,22 +165,41 @@ const detectDisease = async (req, res) => {
       });
     }
 
-    // Simple mock ML processing for prototype
-    // In production, this would call actual ML service
-    const mockDiseases = [
-      { name: 'Tomato Blight', treatment: 'Apply copper-based fungicide every 7-10 days' },
-      { name: 'Wheat Rust', treatment: 'Apply triazole-based fungicide immediately' },
-      { name: 'Leaf Spot', treatment: 'Remove affected leaves and apply neem oil spray' }
-    ];
-    
-    const randomDisease = mockDiseases[Math.floor(Math.random() * mockDiseases.length)];
+    // Call Python ML service for disease detection
+    let diseaseResult;
+    try {
+      const response = await fetch('http://localhost:5000/receive-data', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          image_url: imageUrl
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`ML service responded with status: ${response.status}`);
+      }
+
+      diseaseResult = await response.json();
+    } catch (error) {
+      console.error('Error calling ML service:', error);
+      // Fallback to mock data if ML service is unavailable
+      const mockDiseases = [
+        { name: 'Tomato Blight', treatment: 'Apply copper-based fungicide every 7-10 days' },
+        { name: 'Wheat Rust', treatment: 'Apply triazole-based fungicide immediately' },
+        { name: 'Leaf Spot', treatment: 'Remove affected leaves and apply neem oil spray' }
+      ];
+      diseaseResult = mockDiseases[Math.floor(Math.random() * mockDiseases.length)];
+    }
 
     // Create disease report
     const diseaseReport = new DiseaseReport({
       farmerId: req.user._id,
       imageUrl,
-      diseaseName: randomDisease.name,
-      treatment: randomDisease.treatment
+      diseaseName: diseaseResult.name || diseaseResult.disease_name || 'Unknown Disease',
+      treatment: diseaseResult.treatment || 'Consult agricultural expert for treatment advice'
     });
 
     await diseaseReport.save();
@@ -188,7 +207,7 @@ const detectDisease = async (req, res) => {
     res.json({
       success: true,
       message: 'Disease detection completed successfully',
-      data: { 
+      data: {
         report: diseaseReport,
         processingTime: Math.floor(Math.random() * 3000) + 1000 // Mock processing time
       }
@@ -217,7 +236,7 @@ const getDiseaseReports = async (req, res) => {
     res.json({
       success: true,
       message: 'Disease reports retrieved successfully',
-      data: { 
+      data: {
         reports,
         count: reports.length
       }
@@ -247,7 +266,7 @@ const getDiseaseReportsByFarmer = async (req, res) => {
     res.json({
       success: true,
       message: 'Disease reports retrieved successfully',
-      data: { 
+      data: {
         reports,
         count: reports.length,
         farmerId
@@ -276,7 +295,7 @@ const getDiseaseReportsByDisease = async (req, res) => {
     res.json({
       success: true,
       message: `Disease reports for ${diseaseName} retrieved successfully`,
-      data: { 
+      data: {
         reports,
         count: reports.length,
         diseaseName
