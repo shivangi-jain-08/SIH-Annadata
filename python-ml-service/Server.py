@@ -13,7 +13,7 @@ app = Flask(__name__)
 CORS(app)
 
 
-username = quote_plus("guntijoy1202_db_user")
+username = quote_plus("myselfshivangi08")
 password = quote_plus("Gagan")
 
 # Setup MongoDB
