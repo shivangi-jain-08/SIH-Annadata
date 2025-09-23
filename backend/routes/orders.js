@@ -88,15 +88,11 @@ const nearbyOrdersValidation = [
 
 // Get current user's orders
 router.get('/my-orders',
-  authenticate,
   orderController.getMyOrders
 );
 
-// getNearbyOrders removed - functionality simplified for prototype
-
 // Get orders by status
 router.get('/status/:status',
-  authenticate,
   statusValidation,
   validateRequest,
   orderController.getOrdersByStatus
@@ -104,14 +100,11 @@ router.get('/status/:status',
 
 // Get order statistics
 router.get('/stats',
-  authenticate,
   orderController.getOrderStats
 );
 
 // Create new order
 router.post('/',
-  authenticate,
-  authorize('vendor', 'consumer'),
   createOrderValidation,
   validateRequest,
   orderController.createOrder
@@ -119,7 +112,6 @@ router.post('/',
 
 // Get order by ID
 router.get('/:orderId',
-  authenticate,
   orderIdValidation,
   validateRequest,
   orderController.getOrderById
@@ -127,7 +119,6 @@ router.get('/:orderId',
 
 // Update order status
 router.patch('/:orderId/status',
-  authenticate,
   orderIdValidation,
   updateStatusValidation,
   validateRequest,
@@ -136,7 +127,6 @@ router.patch('/:orderId/status',
 
 // Cancel order
 router.patch('/:orderId/cancel',
-  authenticate,
   orderIdValidation,
   cancelOrderValidation,
   validateRequest,

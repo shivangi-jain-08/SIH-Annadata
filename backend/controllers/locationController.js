@@ -22,8 +22,9 @@ const updateLocation = async (req, res) => {
       });
     }
 
+    const userId = req.user ? req.user._id : '507f1f77bcf86cd799439011';
     const result = await locationService.updateVendorLocation(
-      req.user._id,
+      userId,
       longitude,
       latitude
     );
@@ -153,7 +154,8 @@ const getNearbyConsumers = async (req, res) => {
  */
 const goOffline = async (req, res) => {
   try {
-    const result = await locationService.removeVendorLocation(req.user._id);
+    const userId = req.user ? req.user._id : '507f1f77bcf86cd799439011';
+    const result = await locationService.removeVendorLocation(userId);
 
     res.json({
       success: true,

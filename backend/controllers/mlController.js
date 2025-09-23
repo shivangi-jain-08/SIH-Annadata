@@ -9,7 +9,9 @@ const getHardwareMessages = async (req, res) => {
   try {
     const { limit = 10 } = req.query;
 
-    const messages = await HardwareMessage.find({ farmerId: req.user._id })
+    const farmerId = req.user ? req.user._id : null;
+    const query = farmerId ? { farmerId } : {};
+    const messages = await HardwareMessage.find(query)
       .sort({ createdAt: -1 })
       .limit(parseInt(limit))
       .populate('farmerId', 'name location');
@@ -36,7 +38,9 @@ const getHardwareMessages = async (req, res) => {
  */
 const getLatestHardwareMessage = async (req, res) => {
   try {
-    const message = await HardwareMessage.findOne({ farmerId: req.user._id })
+    const farmerId = req.user ? req.user._id : null;
+    const query = farmerId ? { farmerId } : {};
+    const message = await HardwareMessage.findOne(query)
       .sort({ createdAt: -1 })
       .populate('farmerId', 'name location');
 
@@ -68,7 +72,9 @@ const getCropRecommendations = async (req, res) => {
   try {
     const { limit = 10 } = req.query;
 
-    const recommendations = await CropRecommendation.find({ farmerId: req.user._id })
+    const farmerId = req.user ? req.user._id : null;
+    const query = farmerId ? { farmerId } : {};
+    const recommendations = await CropRecommendation.find(query)
       .sort({ createdAt: -1 })
       .limit(parseInt(limit))
       .populate('farmerId', 'name location')
@@ -96,7 +102,9 @@ const getCropRecommendations = async (req, res) => {
  */
 const getLatestCropRecommendation = async (req, res) => {
   try {
-    const recommendation = await CropRecommendation.findOne({ farmerId: req.user._id })
+    const farmerId = req.user ? req.user._id : null;
+    const query = farmerId ? { farmerId } : {};
+    const recommendation = await CropRecommendation.findOne(query)
       .sort({ createdAt: -1 })
       .populate('farmerId', 'name location')
       .populate('hardwareMessageId', 'sensorData createdAt');
@@ -196,7 +204,7 @@ const detectDisease = async (req, res) => {
 
     // Create disease report
     const diseaseReport = new DiseaseReport({
-      farmerId: req.user._id,
+      farmerId: req.user ? req.user._id : '507f1f77bcf86cd799439011',
       imageUrl,
       diseaseName: diseaseResult.name || diseaseResult.disease_name || 'Unknown Disease',
       treatment: diseaseResult.treatment || 'Consult agricultural expert for treatment advice'
@@ -228,7 +236,9 @@ const getDiseaseReports = async (req, res) => {
   try {
     const { limit = 10 } = req.query;
 
-    const reports = await DiseaseReport.find({ farmerId: req.user._id })
+    const farmerId = req.user ? req.user._id : null;
+    const query = farmerId ? { farmerId } : {};
+    const reports = await DiseaseReport.find(query)
       .sort({ createdAt: -1 })
       .limit(parseInt(limit))
       .populate('farmerId', 'name location');

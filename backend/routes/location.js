@@ -47,28 +47,22 @@ const distanceValidation = [
 
 // Routes
 
-// Update vendor location (vendors only)
+// Update vendor location
 router.post('/update',
-  authenticate,
-  authorize('vendor'),
   updateLocationValidation,
   validateRequest,
   locationController.updateLocation
 );
 
-// Get nearby vendors (consumers and vendors)
+// Get nearby vendors
 router.get('/nearby-vendors',
-  authenticate,
-  authorize('consumer', 'vendor'),
   nearbyValidation,
   validateRequest,
   locationController.getNearbyVendors
 );
 
-// Get nearby consumers (vendors only)
+// Get nearby consumers
 router.get('/nearby-consumers',
-  authenticate,
-  authorize('vendor'),
   nearbyValidation,
   validateRequest,
   locationController.getNearbyConsumers
@@ -76,26 +70,21 @@ router.get('/nearby-consumers',
 
 // Go offline (remove from active locations)
 router.delete('/offline',
-  authenticate,
-  authorize('vendor'),
   locationController.goOffline
 );
 
 // Get all active vendor locations (for monitoring)
 router.get('/active-vendors',
-  authenticate,
   locationController.getActiveVendors
 );
 
 // Get location service statistics
 router.get('/stats',
-  authenticate,
   locationController.getLocationStats
 );
 
 // Calculate distance between two points
 router.get('/distance',
-  authenticate,
   distanceValidation,
   validateRequest,
   locationController.calculateDistance

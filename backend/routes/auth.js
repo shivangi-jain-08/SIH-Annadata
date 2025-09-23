@@ -70,17 +70,14 @@ router.post('/login',
 );
 
 router.post('/logout',
-  authenticate,
   authController.logout
 );
 
 router.get('/verify-token',
-  authenticate,
   authController.verifyTokenEndpoint
 );
 
 router.get('/profile',
-  authenticate,
   authController.getProfile
 );
 

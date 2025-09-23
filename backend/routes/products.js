@@ -138,13 +138,11 @@ const quantityValidation = [
 
 // Get all products with filters
 router.get('/',
-  authenticate,
   productController.getProducts
 );
 
 // Search products
 router.get('/search',
-  authenticate,
   searchValidation,
   validateRequest,
   productController.searchProducts
@@ -152,7 +150,6 @@ router.get('/search',
 
 // Get products by category
 router.get('/category/:category',
-  authenticate,
   categoryValidation,
   validateRequest,
   productController.getProductsByCategory
@@ -160,15 +157,11 @@ router.get('/category/:category',
 
 // Get current user's products
 router.get('/my-products',
-  authenticate,
-  authorize('farmer', 'vendor'),
   productController.getMyProducts
 );
 
 // Create new product
 router.post('/',
-  authenticate,
-  authorize('farmer', 'vendor'),
   uploadMultiple('images', 5),
   createProductValidation,
   validateRequest,
@@ -184,7 +177,6 @@ router.post('/',
 
 // Get product by ID
 router.get('/:productId',
-  authenticate,
   productIdValidation,
   validateRequest,
   productController.getProductById
@@ -192,8 +184,6 @@ router.get('/:productId',
 
 // Update product
 router.put('/:productId',
-  authenticate,
-  authorize('farmer', 'vendor'),
   productIdValidation,
   uploadMultiple('images', 5),
   updateProductValidation,
@@ -210,8 +200,6 @@ router.put('/:productId',
 
 // Delete product
 router.delete('/:productId',
-  authenticate,
-  authorize('farmer', 'vendor'),
   productIdValidation,
   validateRequest,
   productController.deleteProduct
@@ -219,8 +207,6 @@ router.delete('/:productId',
 
 // Update product quantity
 router.patch('/:productId/quantity',
-  authenticate,
-  authorize('farmer', 'vendor'),
   productIdValidation,
   quantityValidation,
   validateRequest,

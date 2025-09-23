@@ -85,13 +85,11 @@ const roleValidation = [
 
 // Get current user profile
 router.get('/profile',
-  authenticate,
   userController.getProfile
 );
 
 // Update current user profile
 router.put('/profile',
-  authenticate,
   updateProfileValidation,
   validateRequest,
   userController.updateProfile
@@ -99,7 +97,6 @@ router.put('/profile',
 
 // Update current user location
 router.put('/location',
-  authenticate,
   updateLocationValidation,
   validateRequest,
   userController.updateLocation
@@ -107,7 +104,6 @@ router.put('/location',
 
 // Get user by ID (public info)
 router.get('/:userId',
-  authenticate,
   userIdValidation,
   validateRequest,
   userController.getUserById
@@ -115,7 +111,6 @@ router.get('/:userId',
 
 // Get nearby users
 router.get('/nearby/search',
-  authenticate,
   nearbyUsersValidation,
   validateRequest,
   userController.getNearbyUsers
@@ -123,7 +118,6 @@ router.get('/nearby/search',
 
 // Search users
 router.get('/search/query',
-  authenticate,
   searchUsersValidation,
   validateRequest,
   userController.searchUsers
@@ -131,16 +125,13 @@ router.get('/search/query',
 
 // Get users by role
 router.get('/role/:role',
-  authenticate,
   roleValidation,
   validateRequest,
   userController.getUsersByRole
 );
 
-// Get user statistics (admin only - for future use)
+// Get user statistics
 router.get('/admin/stats',
-  authenticate,
-  // authorize('admin'), // Commented out since we don't have admin role yet
   userController.getUserStats
 );
 

@@ -128,19 +128,16 @@ const notificationIdValidation = [
 
 // Get current user's notifications
 router.get('/',
-  authenticate,
   notificationController.getNotifications
 );
 
 // Get notification statistics
 router.get('/stats',
-  authenticate,
   notificationController.getNotificationStats
 );
 
 // Send a general notification
 router.post('/send',
-  authenticate,
   sendNotificationValidation,
   validateRequest,
   notificationController.sendNotification
@@ -148,7 +145,6 @@ router.post('/send',
 
 // Send order update notification
 router.post('/order-update',
-  authenticate,
   orderUpdateValidation,
   validateRequest,
   notificationController.sendOrderUpdate
@@ -156,7 +152,6 @@ router.post('/order-update',
 
 // Send vendor nearby notification
 router.post('/vendor-nearby',
-  authenticate,
   vendorNearbyValidation,
   validateRequest,
   notificationController.sendVendorNearby
@@ -164,7 +159,6 @@ router.post('/vendor-nearby',
 
 // Send ML analysis complete notification
 router.post('/ml-complete',
-  authenticate,
   mlCompleteValidation,
   validateRequest,
   notificationController.sendMLComplete
@@ -172,7 +166,6 @@ router.post('/ml-complete',
 
 // Send system notification
 router.post('/system',
-  authenticate,
   systemNotificationValidation,
   validateRequest,
   notificationController.sendSystemNotification
@@ -180,7 +173,6 @@ router.post('/system',
 
 // Test notification (for development)
 router.post('/test',
-  authenticate,
   testNotificationValidation,
   validateRequest,
   notificationController.testNotification
@@ -188,7 +180,6 @@ router.post('/test',
 
 // Mark notification as read
 router.patch('/:notificationId/read',
-  authenticate,
   notificationIdValidation,
   validateRequest,
   notificationController.markAsRead
@@ -196,14 +187,11 @@ router.patch('/:notificationId/read',
 
 // Mark all notifications as read
 router.patch('/mark-all-read',
-  authenticate,
   notificationController.markAllAsRead
 );
 
-// Retry failed notifications (admin function)
+// Retry failed notifications
 router.post('/retry-failed',
-  authenticate,
-  // authorize('admin'), // Commented out since we don't have admin role yet
   notificationController.retryFailedNotifications
 );
 

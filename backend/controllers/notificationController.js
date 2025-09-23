@@ -8,8 +8,8 @@ const sendNotification = async (req, res) => {
   try {
     const { userId, type, title, message, data, deliveryMethod } = req.body;
 
-    // If userId is not provided, use current user
-    const targetUserId = userId || req.user._id;
+    // If userId is not provided, use current user or mock ID
+    const targetUserId = userId || (req.user ? req.user._id : '507f1f77bcf86cd799439011');
 
     const notification = await notificationService.createNotification(
       targetUserId,
@@ -47,7 +47,8 @@ const getNotifications = async (req, res) => {
     if (page) filters.page = parseInt(page);
     if (limit) filters.limit = parseInt(limit);
 
-    const result = await notificationService.getUserNotifications(req.user._id, filters);
+    const userId = req.user ? req.user._id : '507f1f77bcf86cd799439011';
+    const result = await notificationService.getUserNotifications(userId, filters);
 
     res.json({
       success: true,
@@ -70,9 +71,10 @@ const markAsRead = async (req, res) => {
   try {
     const { notificationId } = req.params;
 
+    const userId = req.user ? req.user._id : '507f1f77bcf86cd799439011';
     const notification = await notificationService.markNotificationAsRead(
       notificationId,
-      req.user._id
+      userId
     );
 
     res.json({
@@ -102,7 +104,8 @@ const markAsRead = async (req, res) => {
  */
 const markAllAsRead = async (req, res) => {
   try {
-    const result = await notificationService.markAllNotificationsAsRead(req.user._id);
+    const userId = req.user ? req.user._id : '507f1f77bcf86cd799439011';
+    const result = await notificationService.markAllNotificationsAsRead(userId);
 
     res.json({
       success: true,
@@ -125,7 +128,8 @@ const markAllAsRead = async (req, res) => {
  */
 const getNotificationStats = async (req, res) => {
   try {
-    const stats = await notificationService.getNotificationStats(req.user._id);
+    const userId = req.user ? req.user._id : '507f1f77bcf86cd799439011';
+    const stats = await notificationService.getNotificationStats(userId);
 
     res.json({
       success: true,
@@ -203,7 +207,7 @@ const sendMLComplete = async (req, res) => {
     const { userId, analysisType, reportId } = req.body;
 
     const notification = await notificationService.sendMLCompleteNotification(
-      userId || req.user._id,
+      userId || (req.user ? req.user._id : '507f1f77bcf86cd799439011'),
       analysisType,
       reportId
     );
@@ -278,8 +282,9 @@ const testNotification = async (req, res) => {
   try {
     const { title, message, type } = req.body;
 
+    const userId = req.user ? req.user._id : '507f1f77bcf86cd799439011';
     const notification = await notificationService.createNotification(
-      req.user._id,
+      userId,
       type || 'system',
       title || 'Test Notification',
       message || 'This is a test notification',

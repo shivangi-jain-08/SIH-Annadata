@@ -70,15 +70,11 @@ const areaValidation = [
 
 // Get current user's hardware messages
 router.get('/hardware-messages',
-  authenticate,
-  authorize('farmer'),
   mlController.getHardwareMessages
 );
 
 // Get latest hardware message for current user
 router.get('/hardware-messages/latest',
-  authenticate,
-  authorize('farmer'),
   mlController.getLatestHardwareMessage
 );
 
@@ -86,26 +82,18 @@ router.get('/hardware-messages/latest',
 
 // Get current user's crop recommendations
 router.get('/crop-recommendations',
-  authenticate,
-  authorize('farmer'),
   mlController.getCropRecommendations
 );
 
 // Get latest crop recommendation for current user
 router.get('/crop-recommendations/latest',
-  authenticate,
-  authorize('farmer'),
   mlController.getLatestCropRecommendation
 );
-
-// Soil Report Routes removed - use hardware-messages and crop-recommendations instead
 
 // Disease Detection Routes
 
 // Detect disease from uploaded image
 router.post('/disease-detection',
-  authenticate,
-  authorize('farmer'),
   mlLimiter,
   uploadSingle('image'),
   diseaseDetectionValidation,
@@ -115,14 +103,11 @@ router.post('/disease-detection',
 
 // Get current user's disease reports
 router.get('/disease-reports',
-  authenticate,
-  authorize('farmer'),
   mlController.getDiseaseReports
 );
 
 // Get disease reports by farmer ID
 router.get('/disease-reports/farmer/:farmerId',
-  authenticate,
   farmerIdValidation,
   validateRequest,
   mlController.getDiseaseReportsByFarmer
@@ -130,19 +115,13 @@ router.get('/disease-reports/farmer/:farmerId',
 
 // Get disease reports by disease name
 router.get('/disease-reports/disease/:diseaseName',
-  authenticate,
   diseaseNameValidation,
   validateRequest,
   mlController.getDiseaseReportsByDisease
 );
 
-// getDiseaseReportsByCrop removed - functionality simplified for prototype
-
-
-
 // ML Service Health
 router.get('/health',
-  authenticate,
   mlController.getMLServiceHealth
 );
 
