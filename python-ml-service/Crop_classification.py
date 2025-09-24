@@ -19,9 +19,9 @@ def crop_class(arr):
       def forward(self,x):
         return self.stackmf(x)
 
-    Model = CropModel(in_=7,hidden=64,out=23).to(device)
+    Model = CropModel(in_=7,hidden=64,out=22).to(device)
 
-    Model.load_state_dict(torch.load(f="Crop_models\\Crop_Classification_modelv3.pth"))
+    Model.load_state_dict(torch.load(f="Crop_models\\Crop_Classification_modelv5.pth"))
 
     data = np.array(arr)
     data_tensor = torch.from_numpy(data).float().to(device)
@@ -31,6 +31,6 @@ def crop_class(arr):
       pred = Model(data_tensor)
     ss = torch.softmax(pred,dim=0)
     for keys,values in mapping.items():
-      if values == ss.argmax().item():
+      if values == ss.argmax().item()+1:
         li = ss.max().item()
-        return keys,li
+        return {"crop_name": keys, "Suitability": li} 
