@@ -70,8 +70,8 @@ def buffer():
                     Humidity = arr[4]
                     pH_Value = arr[5]
                     Rainfall = arr[6]
-                    Crop = crop_class(arr)
-                    # If anyone wanted to change the prompt-change it here ~~
+                    Crop = crop_class(arr)                                  
+                    # If anyone wanted to change the prompt-change it here    \/
                     response = model.generate_content(f"Based on the given soil and climate data Nitrogen: {Nitrogen}, Phosphorus: {Phosphorus}, Potassium: {Potassium}, Temperature: {Temperature}, Humidity: {Humidity}, pH Value: {pH_Value}, Rainfall: {Rainfall},  the recommended crop is {Crop} for Punjab. Write farmer-friendly advice in simple English, within 70 words, in clear bullet points. Do not include any introductory phrases like 'Here is your advice'—only the direct guidance.")
                     arraysender.insert_one({"Nitrogen":Nitrogen,"Phosphorus":Phosphorus,"Potassium":Potassium,"Temperature":Temperature,"Humidity":Humidity,"pH":pH_Value,"Rainfall":Rainfall})
                     recommendations.insert_one({"recommendations":Crop,"generalRecommendations":response.text})
@@ -90,7 +90,7 @@ def receive_data():
         data = request.get_json(force=True)
         print("Received JSON:", data)
 
-        manual7 = data.get("Cropimgdiseaseclas")
+        manual7 = data.get("manualentryarray")
         isimg = data.get("image_url")
 
         if isimg:
