@@ -1,0 +1,38 @@
+{
+  "name": "annadata-app",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@react-native-masked-view/masked-view": "^0.3.2",
+    "@react-navigation/drawer": "^7.5.8",
+    "@react-navigation/material-top-tabs": "^7.3.7",
+    "@react-navigation/stack": "^7.4.8",
+    "babel-preset-expo": "~54.0.0",
+    "expo": "~54.0.7",
+    "expo-status-bar": "~3.0.8",
+    "lucide-react-native": "^0.544.0",
+    "react": "19.1.0",
+    "react-native": "0.81.4",
+    "react-native-check-box": "^2.1.7",
+    "react-native-gesture-handler": "~2.28.0",
+    "react-native-pager-view": "^6.9.1",
+    "react-native-reanimated": "^4.1.0",
+    "react-native-safe-area-context": "^5.6.1",
+    "react-native-svg": "^15.12.1",
+    "react-native-worklets": "^0.5.1",
+    "react-speech-recognition": "^4.0.1"
+  },
+  "private": true,
+  "devDependencies": {
+    "@types/react": "^19.1.13",
+    "react-native-dotenv": "^3.4.11",
+    "typescript": "^5.9.2"
+  }
+}
