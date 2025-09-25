@@ -104,8 +104,15 @@ class Server {
     // Compression
     this.app.use(compression());
 
-    // Request parsing
-    this.app.use(express.json({ limit: '10mb' }));
+    // Request parsing - exclude file upload routes from JSON parsing
+    this.app.use((req, res, next) => {
+      // Skip JSON parsing for file upload endpoints
+      if ((req.path.includes('/disease-detection') || req.originalUrl.includes('/disease-detection')) && req.method === 'POST') {
+        console.log('Skipping JSON parsing for disease detection endpoint');
+        return next();
+      }
+      express.json({ limit: '10mb' })(req, res, next);
+    });
     this.app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
     // Request ID generation
@@ -121,7 +128,7 @@ class Server {
     }
 
     // Rate limiting
-    this.app.use(generalLimiter);
+    // this.app.use(generalLimiter);
 
     // Trust proxy
     this.app.set('trust proxy', 1);

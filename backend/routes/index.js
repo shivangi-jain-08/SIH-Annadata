@@ -3,9 +3,12 @@ const authRoutes = require('./auth');
 const userRoutes = require('./users');
 const productRoutes = require('./products');
 const orderRoutes = require('./orders');
+const marketplaceRoutes = require('./marketplace');
 const mlRoutes = require('./ml');
 const locationRoutes = require('./location');
 const notificationRoutes = require('./notifications');
+const testingRoutes = require('./testing');
+const testUserRoutes = require('../create_test_user_endpoint');
 
 const router = express.Router();
 
@@ -18,9 +21,12 @@ router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/products', productRoutes);
 router.use('/orders', orderRoutes);
+router.use('/marketplace', marketplaceRoutes);
 router.use('/ml', mlRoutes);
 router.use('/location', locationRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/testing', testingRoutes);
+router.use('/test-setup', testUserRoutes);
 
 // API documentation endpoint
 router.get('/docs', (req, res) => {

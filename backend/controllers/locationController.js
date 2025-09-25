@@ -268,6 +268,131 @@ const calculateDistance = async (req, res) => {
   }
 };
 
+/**
+ * Get consumer notification preferences
+ */
+const getConsumerPreferences = async (req, res) => {
+  try {
+    const userId = req.user ? req.user._id : '507f1f77bcf86cd799439011';
+    const { User } = require('../models');
+    
+    const user = await User.findById(userId).select('notificationPreferences role');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Consumer preferences retrieved successfully',
+      data: {
+        preferences: user.notificationPreferences || {
+          proximityNotifications: {
+            enabled: true,
+            radius: 1000,
+            quietHours: { enabled: false, start: '22:00', end: '08:00' },
+            notificationTypes: { sound: true, visual: true, vibration: false },
+            vendorTypes: [],
+            minimumRating: 0
+          },
+          doNotDisturb: false
+        }
+      }
+    });
+  } catch (error) {
+    logger.error('Get consumer preferences failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve consumer preferences'
+    });
+  }
+};
+
+/**
+ * Update consumer notification preferences
+ */
+const updateConsumerPreferences = async (req, res) => {
+  try {
+    const userId = req.user ? req.user._id : '507f1f77bcf86cd799439011';
+    const { User } = require('../models');
+    
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Update preferences using the instance method
+    await user.updateNotificationPreferences(req.body);
+
+    res.json({
+      success: true,
+      message: 'Consumer preferences updated successfully',
+      data: {
+        preferences: user.notificationPreferences
+      }
+    });
+  } catch (error) {
+    logger.error('Update consumer preferences failed:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update consumer preferences'
+    });
+  }
+};
+
+/**
+ * Manual proximity check for testing
+ */
+const manualProximityCheck = async (req, res) => {
+  try {
+    const { vendorId, consumerLocation } = req.body;
+    const proximityService = require('../services/proximityService');
+
+    const result = await proximityService.manualProximityCheck(vendorId, consumerLocation);
+
+    res.json({
+      success: true,
+      message: 'Proximity check completed successfully',
+      data: result
+    });
+  } catch (error) {
+    logger.error('Manual proximity check failed:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to perform proximity check'
+    });
+  }
+};
+
+/**
+ * Get proximity service statistics
+ */
+const getProximityStats = async (req, res) => {
+  try {
+    const proximityService = require('../services/proximityService');
+    const stats = await proximityService.getProximityStats();
+
+    res.json({
+      success: true,
+      message: 'Proximity statistics retrieved successfully',
+      data: { stats }
+    });
+  } catch (error) {
+    logger.error('Get proximity stats failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve proximity statistics'
+    });
+  }
+};
+
 module.exports = {
   updateLocation,
   getNearbyVendors,
@@ -275,5 +400,9 @@ module.exports = {
   goOffline,
   getActiveVendors,
   getLocationStats,
-  calculateDistance
+  calculateDistance,
+  getConsumerPreferences,
+  updateConsumerPreferences,
+  manualProximityCheck,
+  getProximityStats
 };

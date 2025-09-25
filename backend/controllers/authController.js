@@ -206,6 +206,14 @@ const logout = async (req, res) => {
  */
 const verifyTokenEndpoint = async (req, res) => {
   try {
+    // Check if user exists (should be set by authenticate middleware)
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not found or token invalid'
+      });
+    }
+
     // If we reach here, the token is valid (middleware already verified it)
     res.json({
       success: true,

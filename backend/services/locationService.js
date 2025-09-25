@@ -67,6 +67,20 @@ const updateVendorLocation = async (vendorId, longitude, latitude) => {
       coordinates: [longitude, latitude]
     });
 
+    // Trigger proximity check for nearby consumers (async, don't wait)
+    setImmediate(async () => {
+      try {
+        const proximityService = require('./proximityService');
+        await proximityService.checkProximityAndNotify(vendorId, longitude, latitude);
+      } catch (proximityError) {
+        logger.error('Proximity check failed after location update', {
+          vendorId,
+          coordinates: [longitude, latitude],
+          error: proximityError.message
+        });
+      }
+    });
+
     return { success: true, coordinates: [longitude, latitude] };
   } catch (error) {
     logger.error('Update vendor location failed:', error);

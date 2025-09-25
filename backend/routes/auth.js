@@ -74,6 +74,7 @@ router.post('/logout',
 );
 
 router.get('/verify-token',
+  authenticate,
   authController.verifyTokenEndpoint
 );
 

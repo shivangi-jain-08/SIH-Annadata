@@ -36,6 +36,7 @@ Complete database schema documentation for all collections.
 ```
 
 **Sample:**
+
 ```json
 {
   "_id": "507f1f77bcf86cd799439011",
@@ -81,6 +82,7 @@ Complete database schema documentation for all collections.
 ```
 
 **Sample:**
+
 ```json
 {
   "_id": "507f1f77bcf86cd799439012",
@@ -204,6 +206,7 @@ Complete database schema documentation for all collections.
 ## Database Connection
 
 **MongoDB Atlas URI:**
+
 ```
 mongodb+srv://myselfshivangi08:indiA_1234@cluster1.goeqstp.mongodb.net/annadata
 ```

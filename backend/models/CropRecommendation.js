@@ -11,27 +11,44 @@ const cropRecommendationSchema = new mongoose.Schema({
     ref: 'HardwareMessage',
     required: [true, 'Hardware message ID is required']
   },
-  recommendations: [{
-    cropName: {
-      type: String,
-      required: [true, 'Crop name is required'],
-      trim: true
-    },
-    suitabilityPercentage: {
-      type: Number,
-      required: [true, 'Suitability percentage is required'],
-      min: [0, 'Suitability percentage cannot be negative'],
-      max: [100, 'Suitability percentage cannot exceed 100']
-    },
-    expectedYield: {
-      type: Number,
-      min: [0, 'Expected yield cannot be negative']
-    }
-  }],
-  generalRecommendations: [{
+  cropName: {
+    type: String,
+    required: [true, 'Crop name is required'],
+    trim: true
+  },
+  suitabilityPercentage: {
+    type: Number,
+    required: [true, 'Suitability percentage is required'],
+    min: [0, 'Suitability percentage cannot be negative'],
+    max: [100, 'Suitability percentage cannot exceed 100']
+  },
+  expectedYield: {
     type: String,
     trim: true
-  }]
+  },
+  plantingAdvice: {
+    type: String,
+    trim: true
+  },
+  recommendations: [{
+    type: String,
+    trim: true
+  }],
+  analysisDate: {
+    type: Date,
+    default: Date.now
+  },
+  location: {
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point'
+    },
+    coordinates: {
+      type: [Number],
+      default: [0, 0]
+    }
+  }
 }, {
   timestamps: true,
   toJSON: {

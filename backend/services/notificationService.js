@@ -16,7 +16,7 @@ class NotificationService {
       const notificationDoc = new Notification({
         userId,
         title: notification.title,
-        body: notification.body,
+        message: notification.body, // Fix: use 'message' instead of 'body'
         data,
         type: data.type || 'general',
         isRead: false

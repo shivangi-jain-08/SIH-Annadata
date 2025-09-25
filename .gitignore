@@ -1,5 +1,7 @@
 .kiro
 .vscode
+annadata-site
+web-simulator
 python-ml-service/New Plant Diseases Dataset(Augmented)
 node_modules
 package-lock.json

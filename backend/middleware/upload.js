@@ -12,7 +12,14 @@ if (!fs.existsSync(uploadDir)) {
 // Configure storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const subDir = path.join(uploadDir, 'products');
+    // Determine subdirectory based on the endpoint
+    let subDir;
+    if (req.originalUrl.includes('/disease-detection')) {
+      subDir = path.join(uploadDir, 'disease-images');
+    } else {
+      subDir = path.join(uploadDir, 'products');
+    }
+
     if (!fs.existsSync(subDir)) {
       fs.mkdirSync(subDir, { recursive: true });
     }
@@ -22,14 +29,21 @@ const storage = multer.diskStorage({
     // Generate unique filename
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const extension = path.extname(file.originalname);
-    cb(null, `product-${uniqueSuffix}${extension}`);
+
+    // Use different prefix based on endpoint
+    let prefix = 'product';
+    if (req.originalUrl.includes('/disease-detection')) {
+      prefix = 'disease';
+    }
+
+    cb(null, `${prefix}-${uniqueSuffix}${extension}`);
   }
 });
 
 // File filter
 const fileFilter = (req, file, cb) => {
   // Check file type
-  const allowedTypes = process.env.ALLOWED_IMAGE_TYPES 
+  const allowedTypes = process.env.ALLOWED_IMAGE_TYPES
     ? process.env.ALLOWED_IMAGE_TYPES.split(',')
     : ['image/jpeg', 'image/png', 'image/webp'];
 
@@ -56,11 +70,11 @@ const upload = multer({
 const uploadSingle = (fieldName = 'image') => {
   return (req, res, next) => {
     const singleUpload = upload.single(fieldName);
-    
+
     singleUpload(req, res, (err) => {
       if (err) {
         logger.error('File upload error:', err);
-        
+
         if (err instanceof multer.MulterError) {
           if (err.code === 'LIMIT_FILE_SIZE') {
             return res.status(400).json({
@@ -75,7 +89,7 @@ const uploadSingle = (fieldName = 'image') => {
             });
           }
         }
-        
+
         return res.status(400).json({
           success: false,
           message: err.message || 'File upload failed'
@@ -84,10 +98,17 @@ const uploadSingle = (fieldName = 'image') => {
 
       // Add file URL to request if file was uploaded
       if (req.file) {
-        req.fileUrl = `/uploads/products/${req.file.filename}`;
+        // Determine the correct path based on endpoint
+        let subPath = 'products';
+        if (req.originalUrl.includes('/disease-detection')) {
+          subPath = 'disease-images';
+        }
+
+        req.fileUrl = `/uploads/${subPath}/${req.file.filename}`;
         logger.info('File uploaded successfully', {
           filename: req.file.filename,
           size: req.file.size,
+          path: req.fileUrl,
           userId: req.user?.id
         });
       }
@@ -103,11 +124,11 @@ const uploadSingle = (fieldName = 'image') => {
 const uploadMultiple = (fieldName = 'images', maxCount = 5) => {
   return (req, res, next) => {
     const multipleUpload = upload.array(fieldName, maxCount);
-    
+
     multipleUpload(req, res, (err) => {
       if (err) {
         logger.error('Multiple file upload error:', err);
-        
+
         if (err instanceof multer.MulterError) {
           if (err.code === 'LIMIT_FILE_SIZE') {
             return res.status(400).json({
@@ -122,7 +143,7 @@ const uploadMultiple = (fieldName = 'images', maxCount = 5) => {
             });
           }
         }
-        
+
         return res.status(400).json({
           success: false,
           message: err.message || 'File upload failed'

@@ -8,10 +8,9 @@ http://localhost:3000/api
 ```
 
 ## Authentication
-All protected endpoints require:
+Authentication has been simplified for development. All endpoints are publicly accessible:
 ```javascript
 headers: {
-  'Authorization': 'Bearer YOUR_TOKEN_HERE',
   'Content-Type': 'application/json'
 }
 ```
@@ -45,8 +44,7 @@ POST /api/auth/register
       "email": "farmer@example.com",
       "name": "John Farmer",
       "role": "farmer"
-    },
-    "token": "user_id"
+    }
   }
 }
 ```
@@ -69,13 +67,11 @@ POST /api/auth/login
 ### Get Profile
 ```http
 GET /api/users/profile
-Authorization: Bearer TOKEN
 ```
 
 ### Update Profile
 ```http
 PUT /api/users/profile
-Authorization: Bearer TOKEN
 ```
 
 **Request:**
@@ -91,7 +87,6 @@ Authorization: Bearer TOKEN
 ### List Products
 ```http
 GET /api/products?category=vegetables&page=1&limit=10
-Authorization: Bearer TOKEN
 ```
 
 **Query Parameters:**
@@ -100,10 +95,19 @@ Authorization: Bearer TOKEN
 - `limit` - Items per page (default: 10)
 - `search` - Search by name
 
+### Search Products
+```http
+GET /api/products/search?q=tomato
+```
+
+### Get Products by Category
+```http
+GET /api/products/category/vegetables
+```
+
 ### Create Product
 ```http
 POST /api/products
-Authorization: Bearer TOKEN
 ```
 
 **Request:**
@@ -112,16 +116,16 @@ Authorization: Bearer TOKEN
   "name": "Fresh Tomatoes",
   "description": "Organic tomatoes",
   "price": 50,
-  "quantity": 100,
+  "availableQuantity": 100,
   "unit": "kg",
-  "category": "vegetables"
+  "category": "vegetables",
+  "minimumOrderQuantity": 5
 }
 ```
 
 ### My Products
 ```http
 GET /api/products/my-products
-Authorization: Bearer TOKEN
 ```
 
 ## 📦 Orders
@@ -129,13 +133,21 @@ Authorization: Bearer TOKEN
 ### My Orders
 ```http
 GET /api/orders/my-orders?status=pending
-Authorization: Bearer TOKEN
+```
+
+### Get Orders by Status
+```http
+GET /api/orders/status/pending
+```
+
+### Get Order Statistics
+```http
+GET /api/orders/stats
 ```
 
 ### Create Order
 ```http
 POST /api/orders
-Authorization: Bearer TOKEN
 ```
 
 **Request:**
@@ -144,73 +156,135 @@ Authorization: Bearer TOKEN
   "sellerId": "seller_id",
   "products": [{
     "productId": "product_id",
-    "name": "Fresh Tomatoes",
-    "quantity": 10,
-    "price": 50
+    "quantity": 10
   }],
-  "totalAmount": 500,
-  "deliveryAddress": "123 Main St"
+  "deliveryAddress": "123 Main St",
+  "deliveryLocation": [77.2090, 28.6139],
+  "notes": "Please deliver in the morning"
 }
 ```
 
 ### Update Order Status
 ```http
 PATCH /api/orders/:orderId/status
-Authorization: Bearer TOKEN
 ```
 
 **Request:**
 ```json
 {
-  "status": "confirmed"
+  "status": "confirmed",
+  "deliveryDate": "2024-01-15T10:00:00Z"
 }
 ```
 
-## 🤖 ML Services (Farmers only)
+### Cancel Order
+```http
+PATCH /api/orders/:orderId/cancel
+```
+
+**Request:**
+```json
+{
+  "reason": "Customer requested cancellation"
+}
+```
+
+## 🤖 ML Services
 
 ### Hardware Messages
 ```http
-GET /api/ml/hardware-messages?page=1&limit=10
-Authorization: Bearer TOKEN
+GET /api/ml/hardware-messages?limit=10
 ```
 
-### Soil Reports
+### Latest Hardware Message
 ```http
-GET /api/ml/soil-reports?page=1&limit=10
-Authorization: Bearer TOKEN
+GET /api/ml/hardware-messages/latest
+```
+
+### Crop Recommendations
+```http
+GET /api/ml/crop-recommendations?limit=10
+```
+
+### Latest Crop Recommendation
+```http
+GET /api/ml/crop-recommendations/latest
 ```
 
 ### Disease Detection
 ```http
 POST /api/ml/disease-detection
-Authorization: Bearer TOKEN
 Content-Type: multipart/form-data
 ```
 
 **Form Data:**
 - `image` - Image file
-- `cropType` - Type of crop
+- `cropType` - Type of crop (optional)
+- `location` - [longitude, latitude] (optional)
 
-## 📍 Location (Vendors)
+### Disease Reports
+```http
+GET /api/ml/disease-reports?limit=10
+```
 
-### Update Location
+### Disease Reports by Farmer
+```http
+GET /api/ml/disease-reports/farmer/:farmerId
+```
+
+### Disease Reports by Disease Name
+```http
+GET /api/ml/disease-reports/disease/:diseaseName
+```
+
+### ML Service Health
+```http
+GET /api/ml/health
+```
+
+## 📍 Location Services
+
+### Update Vendor Location
 ```http
 POST /api/location/update
-Authorization: Bearer TOKEN
 ```
 
 **Request:**
 ```json
 {
-  "latitude": 28.6139,
-  "longitude": 77.2090
+  "longitude": 77.2090,
+  "latitude": 28.6139
 }
 ```
 
-### Nearby Vendors
+### Get Nearby Vendors
 ```http
-GET /api/location/nearby-vendors?lat=28.6139&lng=77.2090&radius=5000
-Authorization: Bearer TOKEN
+GET /api/location/nearby-vendors?longitude=77.2090&latitude=28.6139&radius=5000
+```
+
+### Get Nearby Consumers
+```http
+GET /api/location/nearby-consumers?longitude=77.2090&latitude=28.6139&radius=5000
+```
+
+### Get Active Vendors
+```http
+GET /api/location/active-vendors
+```
+
+### Go Offline
+```http
+DELETE /api/location/offline
+```
+
+### Get Location Statistics
+```http
+GET /api/location/stats
+```
+
+### Calculate Distance
+```http
+GET /api/location/distance?lat1=28.6139&lon1=77.2090&lat2=28.6239&lon2=77.2190
 ```
 
 ## 🔔 Notifications
@@ -218,13 +292,117 @@ Authorization: Bearer TOKEN
 ### Get Notifications
 ```http
 GET /api/notifications?page=1&limit=20
-Authorization: Bearer TOKEN
 ```
 
-### Mark as Read
+### Get Notification Statistics
+```http
+GET /api/notifications/stats
+```
+
+### Send General Notification
+```http
+POST /api/notifications/send
+```
+
+**Request:**
+```json
+{
+  "userId": "user_id",
+  "type": "system",
+  "title": "Notification Title",
+  "message": "Notification message",
+  "data": {}
+}
+```
+
+### Send Order Update Notification
+```http
+POST /api/notifications/order-update
+```
+
+**Request:**
+```json
+{
+  "userId": "user_id",
+  "orderId": "order_id",
+  "status": "confirmed",
+  "orderDetails": {}
+}
+```
+
+### Send Vendor Nearby Notification
+```http
+POST /api/notifications/vendor-nearby
+```
+
+**Request:**
+```json
+{
+  "userId": "user_id",
+  "vendorInfo": {
+    "vendorId": "vendor_id",
+    "name": "Vendor Name",
+    "distance": 500
+  }
+}
+```
+
+### Send ML Complete Notification
+```http
+POST /api/notifications/ml-complete
+```
+
+**Request:**
+```json
+{
+  "userId": "user_id",
+  "analysisType": "soil",
+  "reportId": "report_id"
+}
+```
+
+### Send System Notification
+```http
+POST /api/notifications/system
+```
+
+**Request:**
+```json
+{
+  "userId": "user_id",
+  "title": "System Update",
+  "message": "System maintenance scheduled",
+  "data": {}
+}
+```
+
+### Send Test Notification
+```http
+POST /api/notifications/test
+```
+
+**Request:**
+```json
+{
+  "title": "Test Notification",
+  "message": "This is a test",
+  "type": "system"
+}
+```
+
+### Mark Notification as Read
 ```http
 PATCH /api/notifications/:notificationId/read
-Authorization: Bearer TOKEN
+```
+
+### Mark All Notifications as Read
+```http
+PATCH /api/notifications/mark-all-read
+```
+
+### Retry Failed Notifications
+```http
+POST /api/notifications/retry-failed
 ```
 
 ## Error Responses

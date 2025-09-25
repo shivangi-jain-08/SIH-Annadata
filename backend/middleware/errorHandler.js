@@ -256,6 +256,11 @@ const errorHandler = (err, req, res, next) => {
  * Handle 404 errors
  */
 const notFoundHandler = (req, res, next) => {
+  // Suppress WebSocket info requests (likely from browser extensions or dev tools)
+  if (req.originalUrl.includes('/ws/info')) {
+    return res.status(404).json({ error: 'WebSocket info not available' });
+  }
+  
   const error = new NotFoundError(`Route ${req.originalUrl} not found`);
   next(error);
 };

@@ -1,0 +1,28 @@
+/* App-specific styles - cleaned up for dashboard application */
+
+/* Remove default Vite styles that conflict with our layout */
+#root {
+  /* Remove max-width and centering that breaks dashboard layout */
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  text-align: left; /* Changed from center to left for dashboard */
+}
+
+/* Dashboard-specific overrides */
+.dashboard-container {
+  @apply w-full min-h-screen;
+}
+
+/* Ensure proper layout for full-width dashboard */
+.dashboard-main {
+  @apply w-full;
+}
+
+/* Fix any remaining layout issues */
+.container-override {
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}

@@ -62,6 +62,64 @@ const userSchema = new mongoose.Schema({
   },
   lastLogin: {
     type: Date
+  },
+  notificationPreferences: {
+    proximityNotifications: {
+      enabled: { 
+        type: Boolean, 
+        default: true 
+      },
+      radius: { 
+        type: Number, 
+        default: 1000, 
+        min: [100, 'Minimum notification radius is 100 meters'], 
+        max: [5000, 'Maximum notification radius is 5000 meters'] 
+      },
+      quietHours: {
+        enabled: { 
+          type: Boolean, 
+          default: false 
+        },
+        start: { 
+          type: String, 
+          default: '22:00',
+          match: [/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format (HH:MM)']
+        },
+        end: { 
+          type: String, 
+          default: '08:00',
+          match: [/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format (HH:MM)']
+        }
+      },
+      notificationTypes: {
+        sound: { 
+          type: Boolean, 
+          default: true 
+        },
+        visual: { 
+          type: Boolean, 
+          default: true 
+        },
+        vibration: { 
+          type: Boolean, 
+          default: false 
+        }
+      },
+      vendorTypes: [{
+        type: String,
+        trim: true
+      }],
+      minimumRating: { 
+        type: Number, 
+        default: 0, 
+        min: [0, 'Minimum rating cannot be less than 0'], 
+        max: [5, 'Maximum rating cannot be more than 5'] 
+      }
+    },
+    doNotDisturb: { 
+      type: Boolean, 
+      default: false 
+    }
   }
 }, {
   timestamps: true,
@@ -77,10 +135,10 @@ const userSchema = new mongoose.Schema({
 // Create geospatial index for location-based queries
 userSchema.index({ location: '2dsphere' });
 
-// Create indexes for frequently queried fields
-userSchema.index({ email: 1 });
-userSchema.index({ phone: 1 });
+// Note: email and phone indexes are created automatically by unique: true
 userSchema.index({ role: 1, isActive: 1 });
+userSchema.index({ 'notificationPreferences.proximityNotifications.enabled': 1, role: 1 });
+userSchema.index({ 'notificationPreferences.doNotDisturb': 1 });
 
 // Hash password before saving
 userSchema.pre('save', async function(next) {
@@ -112,6 +170,36 @@ userSchema.methods.updateLastLogin = async function() {
   return await this.save();
 };
 
+// Instance method to update notification preferences
+userSchema.methods.updateNotificationPreferences = async function(preferences) {
+  if (preferences.proximityNotifications) {
+    Object.assign(this.notificationPreferences.proximityNotifications, preferences.proximityNotifications);
+  }
+  if (preferences.doNotDisturb !== undefined) {
+    this.notificationPreferences.doNotDisturb = preferences.doNotDisturb;
+  }
+  return await this.save();
+};
+
+// Instance method to check if user should receive proximity notifications
+userSchema.methods.shouldReceiveProximityNotifications = function(vendorDistance) {
+  const prefs = this.notificationPreferences?.proximityNotifications;
+  
+  if (!prefs?.enabled || this.notificationPreferences?.doNotDisturb) {
+    return false;
+  }
+  
+  if (vendorDistance > prefs.radius) {
+    return false;
+  }
+  
+  if (this.constructor.isInQuietHours(this)) {
+    return false;
+  }
+  
+  return true;
+};
+
 // Static method to find users by location
 userSchema.statics.findNearby = function(longitude, latitude, maxDistance = 10000) {
   return this.find({
@@ -131,6 +219,46 @@ userSchema.statics.findNearby = function(longitude, latitude, maxDistance = 1000
 // Static method to find by role
 userSchema.statics.findByRole = function(role, isActive = true) {
   return this.find({ role, isActive });
+};
+
+// Static method to find users eligible for proximity notifications
+userSchema.statics.findEligibleForProximityNotifications = function(longitude, latitude, maxDistance = 5000) {
+  return this.find({
+    role: 'consumer',
+    isActive: true,
+    'notificationPreferences.proximityNotifications.enabled': true,
+    'notificationPreferences.doNotDisturb': false,
+    location: {
+      $near: {
+        $geometry: {
+          type: 'Point',
+          coordinates: [longitude, latitude]
+        },
+        $maxDistance: maxDistance
+      }
+    }
+  });
+};
+
+// Static method to check if user is in quiet hours
+userSchema.statics.isInQuietHours = function(user) {
+  if (!user.notificationPreferences?.proximityNotifications?.quietHours?.enabled) {
+    return false;
+  }
+
+  const now = new Date();
+  const currentTime = now.getHours().toString().padStart(2, '0') + ':' + 
+                     now.getMinutes().toString().padStart(2, '0');
+  
+  const startTime = user.notificationPreferences.proximityNotifications.quietHours.start;
+  const endTime = user.notificationPreferences.proximityNotifications.quietHours.end;
+  
+  // Handle overnight quiet hours (e.g., 22:00 to 08:00)
+  if (startTime > endTime) {
+    return currentTime >= startTime || currentTime <= endTime;
+  } else {
+    return currentTime >= startTime && currentTime <= endTime;
+  }
 };
 
 const User = mongoose.model('User', userSchema);

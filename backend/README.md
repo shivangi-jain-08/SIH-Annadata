@@ -12,52 +12,84 @@ npm run dev
 
 Server runs on: `http://localhost:3000`
 
-## 🔐 Authentication
+## 🔓 Authentication Status
 
-Include token in all requests after login:
+**SIMPLIFIED FOR DEVELOPMENT**: JWT authentication has been removed for rapid frontend development.
+
+### Current State
+
+- ✅ **All endpoints are publicly accessible** (no auth tokens required)
+- ✅ **Ready for immediate frontend development**
+- ✅ **Full API functionality available**
+
+### API Usage (No Auth Required)
+
 ```javascript
-headers: {
-  'Authorization': 'Bearer YOUR_TOKEN_HERE',
-  'Content-Type': 'application/json'
-}
+// Simple fetch - no headers needed
+fetch("http://localhost:3000/api/products")
+  .then((res) => res.json())
+  .then((data) => console.log(data));
+
+// POST requests
+fetch("http://localhost:3000/api/products", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(productData),
+});
 ```
 
-## 📚 Quick API Reference
+## 📚 API Reference
 
 ### Auth
+
 - `POST /api/auth/register` - Register user
 - `POST /api/auth/login` - Login user
 
 ### Users
-- `GET /api/users/profile` - Get profile
-- `PUT /api/users/profile` - Update profile
 
-### Products
-- `GET /api/products` - List products
-- `POST /api/products` - Create product
-- `GET /api/products/my-products` - My products
+- `GET /api/users/profile` - Get user profile
+- `PUT /api/users/profile` - Update user profile
+- `GET /api/users/role/farmer` - Get users by role
 
-### Orders
-- `GET /api/orders/my-orders` - My orders
-- `POST /api/orders` - Create order
-- `PATCH /api/orders/:id/status` - Update status
+### Products ⭐ **Core Feature**
 
-### ML Services (Farmers only)
-- `GET /api/ml/hardware-messages` - Hardware data
-- `GET /api/ml/soil-reports` - Soil analysis
-- `POST /api/ml/disease-detection` - Disease detection
+- `GET /api/products` - List all products
+- `POST /api/products` - Create new product
+- `GET /api/products/search?q=tomato` - Search products
+- `GET /api/products/category/vegetables` - Filter by category
+- `GET /api/products/my-products` - Get user's products
 
-### Location (Vendors)
-- `POST /api/location/update` - Update location
-- `GET /api/location/nearby-vendors` - Find vendors
+### Orders ⭐ **Core Feature**
+
+- `GET /api/orders/my-orders` - Get user's orders
+- `POST /api/orders` - Create new order
+- `GET /api/orders/status/pending` - Get orders by status
+- `GET /api/orders/stats` - Get order statistics
+
+### ML Services ⭐ **AI Features**
+
+- `GET /api/ml/hardware-messages` - Get sensor data
+- `GET /api/ml/crop-recommendations` - Get AI crop suggestions
+- `POST /api/ml/disease-detection` - Detect plant diseases
+- `GET /api/ml/disease-reports` - Get disease detection history
+- `GET /api/ml/health` - Check ML service status
+
+### Location Services ⭐ **Location Features**
+
+- `POST /api/location/update` - Update vendor location
+- `GET /api/location/nearby-vendors?longitude=77&latitude=28` - Find nearby vendors
+- `GET /api/location/active-vendors` - Get all active vendors
+- `GET /api/location/stats` - Get location statistics
 
 ### Notifications
-- `GET /api/notifications` - Get notifications
-- `PATCH /api/notifications/:id/read` - Mark as read
+
+- `GET /api/notifications` - Get user notifications
+- `POST /api/notifications/test` - Send test notification
 
 ## 📖 Detailed Documentation
 
 For complete examples and integration guides, see:
+
 - [API Endpoints](./docs/api-endpoints.md) - All endpoints with examples
 - [Frontend Integration](./docs/frontend-integration.md) - React/React Native examples
 - [Database Schema](./docs/schema.md) - Data models
@@ -70,7 +102,44 @@ For complete examples and integration guides, see:
 - **Vendor**: Products, Orders (buyer/seller), Location
 - **Consumer**: Browse products, Orders (buyer)
 
-## 📞 Support
+## 🔧 Features Available
 
-- Health Check: `GET /api/health`
-- Logs: `backend/logs/`
+### ✅ Core Functionality
+
+- **Product Marketplace**: Browse, search, filter products
+- **AI Insights**: Crop recommendations, sensor data
+- **Location Services**: Find nearby vendors
+- **Order Management**: Create and track orders
+- **User Profiles**: Profile management
+- **Disease Detection**: AI-powered plant disease identification
+- **Real-time Notifications**: Order updates and alerts
+
+## 📞 Support & Testing
+
+- **Health Check**: `GET /api/health`
+- **API Documentation**: `GET /api/docs`
+- **Logs**: `backend/logs/`
+- **Database**: MongoDB Atlas (connected)
+
+## 🚀 Frontend Integration
+
+Start building your React/React Native app immediately:
+
+```javascript
+// Example: Get all products
+const products = await fetch("http://localhost:3000/api/products").then((res) =>
+  res.json()
+);
+
+// Example: Search products
+const results = await fetch(
+  "http://localhost:3000/api/products/search?q=tomato"
+).then((res) => res.json());
+
+// Example: Get AI recommendations
+const recommendations = await fetch(
+  "http://localhost:3000/api/ml/crop-recommendations"
+).then((res) => res.json());
+```
+
+See [Frontend Integration Guide](./docs/frontend-integration.md) for complete examples.

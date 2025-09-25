@@ -78,6 +78,18 @@ router.get('/hardware-messages/latest',
   mlController.getLatestHardwareMessage
 );
 
+// Soil Report Routes
+
+// Get current user's soil reports
+router.get('/soil-reports',
+  mlController.getSoilReports
+);
+
+// Get latest soil report for current user
+router.get('/soil-reports/latest',
+  mlController.getLatestSoilReport
+);
+
 // Crop Recommendation Routes
 
 // Get current user's crop recommendations
@@ -95,6 +107,7 @@ router.get('/crop-recommendations/latest',
 // Detect disease from uploaded image
 router.post('/disease-detection',
   mlLimiter,
+  authenticate, // Add authentication
   uploadSingle('image'),
   diseaseDetectionValidation,
   validateRequest,

@@ -19,10 +19,10 @@ All API errors return consistent format:
 - `200` - Success
 - `201` - Created
 - `400` - Bad Request (validation errors)
-- `401` - Unauthorized (invalid/missing token)
-- `403` - Forbidden (insufficient permissions)
 - `404` - Not Found
 - `500` - Internal Server Error
+
+*Note: 401/403 errors are not applicable as authentication is currently disabled*
 
 ## Frontend Error Handler
 
@@ -36,15 +36,6 @@ export const handleApiError = (error, response = null) => {
     switch (response.status) {
       case 400:
         alert('Invalid request. Please check your input.');
-        break;
-      case 401:
-        // Unauthorized - redirect to login
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
-        break;
-      case 403:
-        alert('Access denied. You do not have permission for this action.');
         break;
       case 404:
         alert('Resource not found.');
@@ -71,12 +62,9 @@ export const handleApiError = (error, response = null) => {
 ```javascript
 class ApiClient {
   async request(endpoint, options = {}) {
-    const token = localStorage.getItem('authToken');
-    
     const config = {
       headers: {
         'Content-Type': 'application/json',
-        ...(token && { 'Authorization': `Bearer ${token}` }),
         ...options.headers,
       },
       ...options,
@@ -257,12 +245,7 @@ export const showToast = (message, type = 'info') => {
 
 // Usage
 export const handleApiError = (error) => {
-  if (error.status === 401) {
-    showToast('Session expired. Please login again.', 'error');
-    // Redirect to login
-  } else {
-    showToast(error.message, 'error');
-  }
+  showToast(error.message, 'error');
 };
 ```
 
@@ -272,14 +255,6 @@ export const handleApiError = (error) => {
 import { Alert } from 'react-native';
 
 export const handleApiError = (error) => {
-  if (error.status === 401) {
-    Alert.alert(
-      'Session Expired',
-      'Please login again.',
-      [{ text: 'OK', onPress: () => navigateToLogin() }]
-    );
-  } else {
-    Alert.alert('Error', error.message);
-  }
+  Alert.alert('Error', error.message);
 };
 ```
