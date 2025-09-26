@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { 
   View, 
   Text, 
@@ -8,10 +8,13 @@ import {
   Image,
   Alert,
   Linking,
-  Share
+  Share,
+  ActivityIndicator,
+  RefreshControl
 } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import Icon from '../Icon'
+import UserService from '../services/UserService'
 
 const UserDetailItem = ({ icon, label, value, iconColor = '#666' }) => {
   return (
@@ -70,55 +73,133 @@ const RoleBadge = ({ role }) => {
 
 const Profile = () => {
   const navigation = useNavigation()
+  
+  // State for user data management
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
 
-  // Mock user data
-  const userData = {
-    photo: 'https://via.placeholder.com/120/4CAF50/FFFFFF?text=RK',
-    fullName: 'Rajesh Kumar',
-    role: 'Farmer',
-    email: 'rajesh.kumar@example.com',
-    phoneNumber: '+91 9876543210',
-    village: 'Khairpur Village',
-    state: 'Punjab'
-  }
+  // Load user data from AsyncStorage or API
+  const loadUserData = async (forceFresh = false) => {
+    try {
+      setError(null);
+      
+      let user;
+      if (forceFresh) {
+        // Fetch fresh data from API
+        user = await UserService.fetchUserProfile();
+      } else {
+        // Try to get cached data first
+        user = await UserService.getCurrentUser();
+        if (!user) {
+          // If no cached data, fetch from API
+          user = await UserService.fetchUserProfile();
+        }
+      }
+
+      if (user) {
+        const formattedUser = UserService.formatUserData(user);
+        setUserData(formattedUser);
+      } else {
+        throw new Error('No user data found');
+      }
+    } catch (err) {
+      console.error('Error loading user data:', err);
+      setError(err.message);
+      
+      // Use mock data as fallback
+      const mockUser = UserService.generateMockUserData();
+      const formattedMockUser = UserService.formatUserData(mockUser);
+      setUserData(formattedMockUser);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle refresh
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadUserData(true); // Force fresh data
+    setRefreshing(false);
+  };
+
+  // Load user data on component mount
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  // Generate display data from user data
+  const getDisplayUserData = () => {
+    if (!userData) return {};
+    
+    return {
+      photo: userData.profileImage || UserService.getAvatarUrl(userData),
+      fullName: userData.fullName,
+      role: UserService.getUserRole(userData),
+      email: userData.email,
+      phoneNumber: userData.phone,
+      village: userData.village,
+      state: userData.state,
+      district: userData.district,
+      pincode: userData.pincode,
+      address: userData.address,
+      id: userData.id
+    };
+  };
+
+  const displayData = getDisplayUserData();
 
   const handleTermsAndConditions = () => {
-    Alert.alert(
-      'Terms and Conditions',
-      'Opening Terms and Conditions...',
-      [{ text: 'OK' }]
-    )
+    navigation.navigate('Terms');
   }
 
   const handlePrivacyPolicy = () => {
-    Alert.alert(
-      'Privacy Policy',
-      'Opening Privacy Policy...',
-      [{ text: 'OK' }]
-    )
+    navigation.navigate('Privacy');
   }
 
   const handleContactUs = () => {
-    Alert.alert(
-      'Contact Us',
-      'Choose how you want to contact us:',
-      [
-        { text: 'Call Support', onPress: () => Linking.openURL('tel:+911234567890') },
-        { text: 'Email Support', onPress: () => Linking.openURL('mailto:support@annadata.com') },
-        { text: 'Cancel', style: 'cancel' }
-      ]
-    )
+    // Alert.alert(
+    //   'Contact Us',
+    //   'Choose how you want to contact us:',
+    //   [
+    //     { text: 'Call Support', onPress: () => Linking.openURL('tel:+911234567890') },
+    //     { text: 'Email Support', onPress: () => Linking.openURL('mailto:support@annadata.com') },
+    //     { text: 'Cancel', style: 'cancel' }
+    //   ]
+    // )
+    navigation.navigate('Contact');
   }
 
   const handleShareApp = async () => {
     try {
-      await Share.share({
-        message: 'Check out Annadata - The best app for farmers! Download now and revolutionize your farming experience.',
-        url: 'https://play.google.com/store/apps/annadata', // Mock URL
-        title: 'Share Annadata App'
-      })
+      const shareContent = {
+        title: 'Annadata - Smart Farming Companion',
+        message: `🌾 Discover Annadata - Your Smart Farming Companion! 🌾
+
+🚀 Transform your farming with AI-powered features:
+✅ Crop Disease Detection with 95%+ accuracy
+✅ Real-time Weather Forecasts
+✅ Personalized Crop Recommendations  
+✅ Agricultural Marketplace
+✅ Expert Consultations & Support
+
+📱 Download Annadata now and join thousands of farmers revolutionizing agriculture with technology!
+
+#SmartFarming #Agriculture #Technology #Annadata
+
+Download: https://play.google.com/store/apps/annadata`,
+        url: 'https://play.google.com/store/apps/annadata'
+      }
+
+      await Share.share(shareContent)
     } catch (error) {
-      Alert.alert('Error', 'Could not share the app')
+      console.error('Share error:', error)
+      Alert.alert(
+        'Share Error', 
+        'Could not share the app at the moment. Please try again later.',
+        [{ text: 'OK' }]
+      )
     }
   }
 
@@ -136,7 +217,19 @@ const Profile = () => {
       'Are you sure you want to logout?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', onPress: () => navigation.navigate('Auth'), style: 'destructive' }
+        { 
+          text: 'Logout', 
+          onPress: async () => {
+            try {
+              await UserService.clearUserData();
+              navigation.navigate('Auth');
+            } catch (error) {
+              console.error('Error during logout:', error);
+              Alert.alert('Error', 'Failed to logout properly');
+            }
+          }, 
+          style: 'destructive' 
+        }
       ]
     )
   }
@@ -166,14 +259,29 @@ const Profile = () => {
     {
       icon: 'Share2',
       title: 'Share to a Friend',
-      description: 'Invite friends to use Annadata',
+      description: 'Spread the word about Annadata\'s smart farming features',
       onPress: handleShareApp,
       iconColor: '#9C27B0'
     }
   ]
 
+  // Show loading spinner while data is being fetched
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4CAF50" />
+        <Text style={styles.loadingText}>Loading profile...</Text>
+      </View>
+    );
+  }
+
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
@@ -183,6 +291,9 @@ const Profile = () => {
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerTitle}>Profile</Text>
             <Text style={styles.headerSubtitle}>Manage your account information</Text>
+            {error && (
+              <Text style={styles.errorText}>Using cached data - {error}</Text>
+            )}
           </View>
           <TouchableOpacity style={styles.editButton} onPress={handleEditProfile}>
             <Icon name="Pen" size={20} color="white" />
@@ -195,7 +306,7 @@ const Profile = () => {
         <View style={styles.profileHeader}>
           <View style={styles.profileImageContainer}>
             <Image
-              source={{ uri: userData.photo }}
+              source={{ uri: displayData.photo }}
               style={styles.profileImage}
             />
             <TouchableOpacity style={styles.cameraButton}>
@@ -205,10 +316,10 @@ const Profile = () => {
           
           <View style={styles.profileInfo}>
             <View style={styles.nameContainer}>
-              <Text style={styles.fullName}>{userData.fullName}</Text>
-              <RoleBadge role={userData.role} />
+              <Text style={styles.fullName}>{displayData.fullName || 'Unknown User'}</Text>
+              <RoleBadge role={displayData.role || 'User'} />
             </View>
-            <Text style={styles.profileEmail}>{userData.email}</Text>
+            <Text style={styles.profileEmail}>{displayData.email || 'No email'}</Text>
           </View>
         </View>
 
@@ -217,27 +328,43 @@ const Profile = () => {
           <UserDetailItem
             icon="Mail"
             label="Email Address"
-            value={userData.email}
+            value={displayData.email || 'Not provided'}
             iconColor="#2196F3"
           />
           <UserDetailItem
             icon="Phone"
             label="Phone Number"
-            value={userData.phoneNumber}
+            value={displayData.phoneNumber || 'Not provided'}
             iconColor="#4CAF50"
           />
           <UserDetailItem
             icon="MapPin"
             label="Village"
-            value={userData.village}
+            value={displayData.village || 'Not specified'}
             iconColor="#FF9800"
           />
           <UserDetailItem
             icon="Map"
             label="State"
-            value={userData.state}
+            value={displayData.state || 'Not specified'}
             iconColor="#9C27B0"
           />
+          {displayData.district && (
+            <UserDetailItem
+              icon="Globe"
+              label="District"
+              value={displayData.district}
+              iconColor="#00BCD4"
+            />
+          )}
+          {displayData.pincode && displayData.pincode !== 'Unknown' && (
+            <UserDetailItem
+              icon="Hash"
+              label="PIN Code"
+              value={displayData.pincode}
+              iconColor="#795548"
+            />
+          )}
         </View>
       </View>
 
@@ -264,16 +391,16 @@ const Profile = () => {
         <View style={styles.optionsContainer}>
           <OptionItem
             icon="Settings"
-            title="Settings"
+            title="Settings (Beta)"
             description="App preferences and configurations"
-            onPress={() => Alert.alert('Settings', 'Settings page coming soon!')}
+            onPress={() => navigation.navigate('Settings')}
             iconColor="#666"
           />
           <OptionItem
             icon="Headphones"
             title="Help & Support"
             description="FAQ and troubleshooting"
-            onPress={() => Alert.alert('Help', 'Help section coming soon!')}
+            onPress={() => navigation.navigate('FAQ')}
             iconColor="#2196F3"
           />
           <OptionItem
@@ -509,6 +636,25 @@ const styles = StyleSheet.create({
   versionSubtext: {
     fontSize: 12,
     color: '#999',
+  },
+
+  // Loading Styles
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 10,
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#FF9800',
+    marginTop: 5,
+    fontStyle: 'italic',
   },
 })
 

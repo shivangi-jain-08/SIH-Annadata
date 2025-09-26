@@ -1,8 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native'
 import Svg, { Circle } from 'react-native-svg'
 import Icon from '../Icon'
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native'
+import CropHealthService from '../services/CropHealthService'
+import CropHealthNotificationService from '../services/CropHealthNotificationService'
 
 const { width } = Dimensions.get('window')
 
@@ -74,8 +76,59 @@ const AdvancedOptionCard = ({ icon, title, description, color, onPress }) => {
 }
 
 const Crops = () => {
-  const [cropHealth] = useState(87) // Mock data
+  const [cropHealth, setCropHealth] = useState(87)
+  const [cropHealthStatus, setCropHealthStatus] = useState('Excellent')
+  const [cropHealthDescription, setCropHealthDescription] = useState('Your crops are showing strong growth indicators with optimal environmental conditions.')
+  const [isHealthDataFresh, setIsHealthDataFresh] = useState(false)
   const navigation = useNavigation();
+
+  // Load crop health data on component mount and when screen is focused
+  useEffect(() => {
+    loadCropHealthData()
+    
+    // Listen for navigation focus to reload data
+    const focusUnsubscribe = navigation.addListener('focus', () => {
+      loadCropHealthData()
+    })
+
+    // Subscribe to crop health updates from other pages
+    const healthUpdateUnsubscribe = CropHealthNotificationService.subscribe((updateData) => {
+      console.log('Received crop health update in Crops page:', updateData)
+      // Automatically reload health data when updated from another page
+      loadCropHealthData()
+    })
+    
+    return () => {
+      focusUnsubscribe()
+      healthUpdateUnsubscribe()
+    }
+  }, [navigation])
+
+  // Load crop health data from CropHealthService
+  const loadCropHealthData = async () => {
+    try {
+      console.log('Loading crop health data in Crops page...')
+      const healthInfo = await CropHealthService.getDashboardHealthInfo()
+      
+      setCropHealth(healthInfo.percentage)
+      setCropHealthStatus(healthInfo.status)
+      setCropHealthDescription(
+        healthInfo.description || 
+        'Your crops are showing strong growth indicators with optimal environmental conditions.'
+      )
+      setIsHealthDataFresh(healthInfo.isDataFresh)
+      
+      console.log('Crop health data loaded in Crops page:', healthInfo)
+    } catch (error) {
+      console.error('Error loading crop health data in Crops page:', error)
+      
+      // Keep default values on error
+      setCropHealth(87)
+      setCropHealthStatus('Excellent')
+      setCropHealthDescription('Your crops are showing strong growth indicators with optimal environmental conditions.')
+      setIsHealthDataFresh(false)
+    }
+  }
 
   // Mock crop statistics
   const cropStats = [
@@ -124,13 +177,35 @@ const Crops = () => {
             percentage={cropHealth} 
             size={140} 
             strokeWidth={12} 
-            color="#4CAF50" 
+            color={CropHealthService.getHealthColor(cropHealth)} 
           />
           <View style={styles.healthInfo}>
-            <Text style={styles.healthStatus}>Excellent</Text>
+            <View style={styles.healthStatusContainer}>
+              <Text style={[
+                styles.healthStatus, 
+                { color: CropHealthService.getHealthColor(cropHealth) }
+              ]}>
+                {cropHealthStatus}
+              </Text>
+              {!isHealthDataFresh && (
+                <View style={styles.outdatedIndicator}>
+                  <Icon name="AlertCircle" size={16} color="#FF9800" />
+                  <Text style={styles.outdatedText}>Needs Update</Text>
+                </View>
+              )}
+            </View>
             <Text style={styles.healthDescription}>
-              Your crops are showing strong growth indicators with optimal environmental conditions.
+              {cropHealthDescription}
             </Text>
+            <TouchableOpacity 
+              style={styles.analyzeButton}
+              onPress={() => navigation.navigate('CropRecommendation')}
+            >
+              <Icon name="Brain" size={16} color="#4CAF50" />
+              <Text style={styles.analyzeButtonText}>
+                {isHealthDataFresh ? 'View Analysis Details' : 'Run New Analysis'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -249,11 +324,49 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 15,
   },
+  healthStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
   healthStatus: {
     fontSize: 18,
     fontWeight: 'bold',
+    marginRight: 8,
+  },
+  outdatedIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 152, 0, 0.1)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginLeft: 4,
+  },
+  outdatedText: {
+    fontSize: 11,
+    color: '#FF9800',
+    marginLeft: 3,
+    fontWeight: '600',
+  },
+  analyzeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(76, 175, 80, 0.3)',
+  },
+  analyzeButtonText: {
+    fontSize: 13,
     color: '#4CAF50',
-    marginBottom: 8,
+    marginLeft: 6,
+    fontWeight: '600',
   },
   healthDescription: {
     fontSize: 14,

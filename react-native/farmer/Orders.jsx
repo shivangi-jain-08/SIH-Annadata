@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { 
   View, 
   Text, 
@@ -6,10 +6,13 @@ import {
   ScrollView, 
   Dimensions, 
   FlatList,
-  TouchableOpacity 
+  TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl
 } from 'react-native'
 import Svg, { Polyline, Circle } from 'react-native-svg'
 import Icon from '../Icon'
+import OrdersService from '../services/ordersService'
 
 const { width } = Dimensions.get('window')
 
@@ -35,16 +38,40 @@ const RevenueCard = ({ title, amount, change, icon, color }) => {
   )
 }
 
-const EarningGraph = () => {
-  // Mock data for yearly earnings (12 months)
-  const monthlyData = [45000, 52000, 48000, 65000, 72000, 68000, 75000, 82000, 78000, 85000, 92000, 88000]
-  const maxValue = Math.max(...monthlyData)
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const EarningGraph = ({ orders }) => {
+  // Generate monthly data from orders
+  const generateMonthlyData = (ordersData) => {
+    if (!ordersData || !Array.isArray(ordersData)) {
+      // Fallback mock data
+      return [45000, 52000, 48000, 65000, 72000, 68000, 75000, 82000, 78000, 85000, 92000, 88000];
+    }
+
+    // Initialize array for 12 months
+    const monthlyEarnings = new Array(12).fill(0);
+    const currentYear = new Date().getFullYear();
+
+    // Process orders and calculate monthly earnings
+    ordersData.forEach(order => {
+      if (order.status === 'delivered' && order.totalAmount) {
+        const orderDate = new Date(order.createdAt);
+        if (orderDate.getFullYear() === currentYear) {
+          const monthIndex = orderDate.getMonth(); // 0-11
+          monthlyEarnings[monthIndex] += order.totalAmount;
+        }
+      }
+    });
+
+    return monthlyEarnings;
+  };
+
+  const monthlyData = generateMonthlyData(orders);
+  const maxValue = Math.max(...monthlyData, 10000); // Minimum scale of 10k
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   
   // Calculate points for the graph
-  const graphWidth = width - 80
-  const graphHeight = 120
-  const pointSpacing = graphWidth / (monthlyData.length - 1)
+  const graphWidth = width - 80;
+  const graphHeight = 120;
+  const pointSpacing = graphWidth / (monthlyData.length - 1);
   
   const points = monthlyData.map((value, index) => {
     const x = index * pointSpacing + 20
@@ -135,29 +162,33 @@ const OrderAnalyticsCard = ({ title, value, icon, color, subtitle }) => {
 
 const PendingOrderCard = ({ order }) => {
   const getStatusColor = (status) => {
-    switch (status) {
-      case 'Processing': return '#FF9800'
-      case 'Shipped': return '#2196F3'
-      case 'Delivered': return '#4CAF50'
-      case 'Cancelled': return '#F44336'
-      default: return '#666'
-    }
+    return OrdersService.getStatusColor(status);
   }
 
   const formatDate = (dateString) => {
     const date = new Date(dateString)
-    return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+    return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  }
+
+  const getCropIcon = (cropName) => {
+    const name = cropName?.toLowerCase() || '';
+    if (name.includes('wheat') || name.includes('flour')) return 'Wheat';
+    if (name.includes('rice') || name.includes('basmati')) return 'Leaf';
+    if (name.includes('tomato')) return 'Apple';
+    if (name.includes('spinach') || name.includes('vegetable')) return 'Leaf';
+    if (name.includes('apple') || name.includes('fruit')) return 'Apple';
+    return 'Package';
   }
 
   return (
     <TouchableOpacity style={styles.pendingOrderCard}>
       <View style={styles.orderHeader}>
         <View style={styles.orderIdContainer}>
-          <Text style={styles.orderId}>#{order.id}</Text>
+          <Text style={styles.orderId}>#{order.id?.substring(0, 8) || 'N/A'}</Text>
           <Text style={styles.orderDate}>{formatDate(order.date)}</Text>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) + '20' }]}>
-          <Text style={[styles.statusText, { color: getStatusColor(order.status) }]}>
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.originalStatus || order.status) + '20' }]}>
+          <Text style={[styles.statusText, { color: getStatusColor(order.originalStatus || order.status) }]}>
             {order.status}
           </Text>
         </View>
@@ -165,7 +196,7 @@ const PendingOrderCard = ({ order }) => {
       
       <View style={styles.orderDetails}>
         <View style={styles.orderCrop}>
-          <Icon name="Wheat" size={16} color="#4CAF50" />
+          <Icon name={getCropIcon(order.crop)} size={16} color="#4CAF50" />
           <Text style={styles.orderCropName}>{order.crop}</Text>
         </View>
         <View style={styles.orderQuantity}>
@@ -179,89 +210,241 @@ const PendingOrderCard = ({ order }) => {
           <Icon name="User" size={14} color="#666" />
           <Text style={styles.vendorName}>{order.vendor}</Text>
         </View>
-        <Text style={styles.orderAmount}>₹{order.amount.toLocaleString()}</Text>
+        <Text style={styles.orderAmount}>{OrdersService.formatCurrency(order.amount)}</Text>
       </View>
     </TouchableOpacity>
   )
 }
 
 const Orders = () => {
-  // Mock revenue data
-  const revenueData = [
-    { title: 'Total Revenue', amount: 450000, change: 12.5, icon: 'DollarSign', color: '#4CAF50' },
-    { title: 'This Month', amount: 88000, change: 8.2, icon: 'Calendar', color: '#2196F3' },
-  ]
+  const [ordersData, setOrdersData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [metrics, setMetrics] = useState({});
 
-  // Mock crop earnings data
-  const cropEarnings = [
-    { crop: 'Wheat', earnings: 180000, percentage: 40, color: '#FF9800', icon: 'Wheat' },
-    { crop: 'Rice', earnings: 135000, percentage: 30, color: '#4CAF50', icon: 'Leaf' },
-    { crop: 'Sugarcane', earnings: 90000, percentage: 20, color: '#9C27B0', icon: 'Trees' },
-    { crop: 'Cotton', earnings: 45000, percentage: 10, color: '#F44336', icon: 'CloudSnow' },
-  ]
-
-  // Mock order analytics
-  const orderAnalytics = [
-    { title: 'Total Orders', value: '247', icon: 'ShoppingBag', color: '#4CAF50', subtitle: 'All time' },
-    { title: 'Active Orders', value: '18', icon: 'Clock', color: '#FF9800', subtitle: 'In progress' },
-    { title: 'Vendors', value: '12', icon: 'Users', color: '#2196F3', subtitle: 'Partners' },
-  ]
-
-  // Mock pending orders data (sorted by date)
-  const pendingOrders = [
-    {
-      id: 'ORD001',
-      date: '2025-09-25',
-      crop: 'Wheat',
-      quantity: 150,
-      vendor: 'AgriCorp Ltd',
-      amount: 45000,
-      status: 'Processing'
-    },
-    {
-      id: 'ORD002',
-      date: '2025-09-24',
-      crop: 'Rice',
-      quantity: 200,
-      vendor: 'GrainEx Pvt',
-      amount: 38000,
-      status: 'Shipped'
-    },
-    {
-      id: 'ORD003',
-      date: '2025-09-23',
-      crop: 'Sugarcane',
-      quantity: 500,
-      vendor: 'SugarTech Co',
-      amount: 75000,
-      status: 'Processing'
-    },
-    {
-      id: 'ORD004',
-      date: '2025-09-22',
-      crop: 'Cotton',
-      quantity: 80,
-      vendor: 'TextilePro',
-      amount: 28000,
-      status: 'Shipped'
-    },
-    {
-      id: 'ORD005',
-      date: '2025-09-21',
-      crop: 'Wheat',
-      quantity: 120,
-      vendor: 'FarmFresh Ltd',
-      amount: 36000,
-      status: 'Delivered'
+  // Load orders data from database
+  const loadOrdersData = async () => {
+    try {
+      setError(null);
+      const response = await OrdersService.getUserOrders('seller');
+      
+      if (response.success && response.data && response.data.orders) {
+        const orders = response.data.orders;
+        setOrdersData(orders);
+        
+        // Calculate metrics
+        const calculatedMetrics = OrdersService.getDashboardMetrics(orders);
+        setMetrics(calculatedMetrics);
+      } else {
+        throw new Error('Invalid response format');
+      }
+    } catch (err) {
+      console.error('Error loading orders:', err);
+      setError(err.message);
+      
+      // Use mock data as fallback
+      const mockOrders = OrdersService.generateMockOrderData();
+      setOrdersData(mockOrders);
+      setMetrics(OrdersService.getDashboardMetrics(mockOrders));
+    } finally {
+      setLoading(false);
     }
-  ].sort((a, b) => new Date(b.date) - new Date(a.date)) // Sort by date, newest first
+  };
+
+  // Handle refresh
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadOrdersData();
+    setRefreshing(false);
+  };
+
+  // Load data on component mount
+  useEffect(() => {
+    loadOrdersData();
+  }, []);
+
+  // Generate dynamic crop earnings from orders
+  const generateCropEarnings = (orders) => {
+    if (!orders || !Array.isArray(orders)) return [];
+
+    const cropMap = {};
+    let totalEarnings = 0;
+
+    // Calculate earnings per crop
+    orders.forEach(order => {
+      if (order.status === 'delivered' && order.products) {
+        order.products.forEach(product => {
+          const cropName = product.name || 'Unknown';
+          const earning = product.quantity * product.price;
+          
+          if (!cropMap[cropName]) {
+            cropMap[cropName] = { earnings: 0, icon: getCropIcon(cropName), color: getCropColor(cropName) };
+          }
+          
+          cropMap[cropName].earnings += earning;
+          totalEarnings += earning;
+        });
+      }
+    });
+
+    // Convert to array and calculate percentages
+    return Object.entries(cropMap)
+      .map(([crop, data]) => ({
+        crop,
+        earnings: data.earnings,
+        percentage: totalEarnings > 0 ? Math.round((data.earnings / totalEarnings) * 100) : 0,
+        color: data.color,
+        icon: data.icon
+      }))
+      .sort((a, b) => b.earnings - a.earnings) // Sort by earnings desc
+      .slice(0, 4); // Top 4 crops
+  };
+
+  // Helper functions for crop data
+  const getCropIcon = (cropName) => {
+    const name = cropName.toLowerCase();
+    if (name.includes('wheat') || name.includes('flour')) return 'Wheat';
+    if (name.includes('rice') || name.includes('basmati')) return 'Leaf';
+    if (name.includes('tomato')) return 'Apple';
+    if (name.includes('spinach') || name.includes('vegetable')) return 'Leaf';
+    if (name.includes('apple') || name.includes('fruit')) return 'Apple';
+    return 'Package';
+  };
+
+  const getCropColor = (cropName) => {
+    const colors = ['#FF9800', '#4CAF50', '#9C27B0', '#F44336', '#2196F3', '#FF5722'];
+    const name = cropName.toLowerCase();
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  };
+
+  // Calculate current month earnings
+  const getCurrentMonthEarnings = (orders) => {
+    if (!orders || !Array.isArray(orders)) return 0;
+    
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth();
+    const currentYear = currentDate.getFullYear();
+    
+    return orders
+      .filter(order => {
+        if (order.status !== 'delivered') return false;
+        const orderDate = new Date(order.createdAt);
+        return orderDate.getMonth() === currentMonth && orderDate.getFullYear() === currentYear;
+      })
+      .reduce((total, order) => total + (order.totalAmount || 0), 0);
+  };
+
+  // Get unique buyers count
+  const getUniqueBuyersCount = (orders) => {
+    if (!orders || !Array.isArray(orders)) return 0;
+    const uniqueBuyers = new Set();
+    orders.forEach(order => {
+      if (order.buyerId && order.buyerId._id) {
+        uniqueBuyers.add(order.buyerId._id);
+      }
+    });
+    return uniqueBuyers.size;
+  };
+
+  // Transform database orders to display format
+  const transformOrdersForDisplay = (orders) => {
+    if (!orders || !Array.isArray(orders)) return [];
+    
+    return orders
+      .map(order => ({
+        id: order._id,
+        date: order.createdAt,
+        crop: order.products?.[0]?.name || 'Mixed Products',
+        quantity: order.products?.reduce((sum, p) => sum + (p.quantity || 0), 0) || 0,
+        vendor: order.buyerId?.name || 'Unknown Buyer',
+        amount: order.totalAmount || 0,
+        status: OrdersService.getStatusText(order.status),
+        originalStatus: order.status
+      }))
+      .sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort by date, newest first
+  };
+
+  // Generate revenue data with real calculations
+  const currentMonthEarnings = getCurrentMonthEarnings(ordersData);
+  const totalRevenue = metrics.totalRevenue || 0;
+  const monthlyChange = totalRevenue > 0 ? ((currentMonthEarnings / totalRevenue) * 100).toFixed(1) : 0;
+
+  const revenueData = [
+    { 
+      title: 'Total Revenue', 
+      amount: totalRevenue, 
+      change: 12.5, // You might want to calculate this based on previous period
+      icon: 'DollarSign', 
+      color: '#4CAF50' 
+    },
+    { 
+      title: 'This Month', 
+      amount: currentMonthEarnings, 
+      change: parseFloat(monthlyChange), 
+      icon: 'Calendar', 
+      color: '#2196F3' 
+    },
+  ];
+
+  // Generate crop earnings from real data
+  const cropEarnings = generateCropEarnings(ordersData);
+
+  // Generate order analytics from real data
+  const orderAnalytics = [
+    { 
+      title: 'Total Orders', 
+      value: metrics.totalOrders?.toString() || '0', 
+      icon: 'ShoppingBag', 
+      color: '#4CAF50', 
+      subtitle: 'All time' 
+    },
+    { 
+      title: 'Active Orders', 
+      value: metrics.activeOrders?.toString() || '0', 
+      icon: 'Clock', 
+      color: '#FF9800', 
+      subtitle: 'In progress' 
+    },
+    { 
+      title: 'Buyers', 
+      value: getUniqueBuyersCount(ordersData).toString(), 
+      icon: 'Users', 
+      color: '#2196F3', 
+      subtitle: 'Customers' 
+    },
+  ];
+
+  // Transform orders for display
+  const allOrders = transformOrdersForDisplay(ordersData);
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4CAF50" />
+        <Text style={styles.loadingText}>Loading orders data...</Text>
+      </View>
+    );
+  }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Orders Dashboard</Text>
         <Text style={styles.headerSubtitle}>Track your sales and revenue performance</Text>
+        {error && (
+          <Text style={styles.errorText}>Using cached data - {error}</Text>
+        )}
       </View>
 
       {/* Revenue Dashboard */}
@@ -283,7 +466,7 @@ const Orders = () => {
 
       {/* Earnings Graph */}
       <View style={styles.graphSection}>
-        <EarningGraph />
+        <EarningGraph orders={ordersData} />
       </View>
 
       {/* Crop Earnings Analytics */}
@@ -291,16 +474,23 @@ const Orders = () => {
         <Text style={styles.sectionTitle}>Earnings by Crops</Text>
         <Text style={styles.sectionSubtitle}>Revenue distribution across different crops</Text>
         <View style={styles.cropEarningsContainer}>
-          {cropEarnings.map((crop, index) => (
-            <CropEarningCard
-              key={index}
-              crop={crop.crop}
-              earnings={crop.earnings}
-              percentage={crop.percentage}
-              color={crop.color}
-              icon={crop.icon}
-            />
-          ))}
+          {cropEarnings.length > 0 ? (
+            cropEarnings.map((crop, index) => (
+              <CropEarningCard
+                key={index}
+                crop={crop.crop}
+                earnings={crop.earnings}
+                percentage={crop.percentage}
+                color={crop.color}
+                icon={crop.icon}
+              />
+            ))
+          ) : (
+            <View style={styles.noDataContainer}>
+              <Icon name="TrendingDown" size={24} color="#666" />
+              <Text style={styles.noDataText}>No crop earnings data available</Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -322,25 +512,36 @@ const Orders = () => {
         </View>
       </View>
 
-      {/* Pending Orders List */}
+      {/* All Orders List */}
       <View style={styles.pendingOrdersSection}>
         <View style={styles.pendingOrdersHeader}>
-          <Text style={styles.sectionTitle}>Pending Orders</Text>
-          <TouchableOpacity style={styles.viewAllButton}>
-            <Text style={styles.viewAllText}>View All</Text>
-            <Icon name="ChevronRight" size={16} color="#2196F3" />
+          <Text style={styles.sectionTitle}>All Orders</Text>
+          <TouchableOpacity style={styles.viewAllButton} onPress={onRefresh}>
+            <Icon name="RotateCcw" size={16} color="#2196F3" />
+            <Text style={styles.viewAllText}>Refresh</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.sectionSubtitle}>Recent orders sorted by date</Text>
+        <Text style={styles.sectionSubtitle}>All orders sorted by date ({allOrders.length} total)</Text>
         
-        <FlatList
-          data={pendingOrders}
-          renderItem={({ item }) => <PendingOrderCard order={item} />}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.pendingOrdersList}
-          nestedScrollEnabled={true}
-        />
+        {allOrders.length > 0 ? (
+          <FlatList
+            data={allOrders}
+            renderItem={({ item }) => <PendingOrderCard order={item} />}
+            keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.pendingOrdersList}
+            nestedScrollEnabled={true}
+          />
+        ) : (
+          <View style={styles.noOrdersContainer}>
+            <Icon name="ShoppingBag" size={48} color="#ccc" />
+            <Text style={styles.noOrdersText}>No orders found</Text>
+            <Text style={styles.noOrdersSubtext}>Orders will appear here when customers place them</Text>
+            <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
+              <Text style={styles.refreshButtonText}>Refresh Orders</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     </ScrollView>
   )
@@ -699,6 +900,73 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#4CAF50',
+  },
+
+  // Loading Styles
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 10,
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#FF9800',
+    marginTop: 5,
+    fontStyle: 'italic',
+  },
+
+  // No Data Styles
+  noDataContainer: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  noDataText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 8,
+  },
+  noOrdersContainer: {
+    alignItems: 'center',
+    padding: 40,
+    backgroundColor: 'white',
+    marginHorizontal: 20,
+    borderRadius: 15,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  noOrdersText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 16,
+  },
+  noOrdersSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
+  },
+  refreshButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  refreshButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
 })
 

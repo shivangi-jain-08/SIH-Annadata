@@ -107,22 +107,22 @@ const CProfile = () => {
 
   const handleContactUs = async () => {
     try {
-      const supported = await Linking.canOpenURL('mailto:support@krishimitra.com')
+      const supported = await Linking.canOpenURL('mailto:support@krishika.com')
       if (supported) {
-        await Linking.openURL('mailto:support@krishimitra.com?subject=Support Request&body=Hi, I need help with...')
+        await Linking.openURL('mailto:support@krishika.com?subject=Support Request&body=Hi, I need help with...')
       } else {
-        Alert.alert('Contact Us', 'Email: support@krishimitra.com\nPhone: +91 1800-123-4567')
+        Alert.alert('Contact Us', 'Email: support@krishika.com\nPhone: +91 1800-123-4567')
       }
     } catch (error) {
-      Alert.alert('Contact Us', 'Email: support@krishimitra.com\nPhone: +91 1800-123-4567')
+      Alert.alert('Contact Us', 'Email: support@krishika.com\nPhone: +91 1800-123-4567')
     }
   }
 
   const handleShareApp = async () => {
     try {
       await Share.share({
-        message: 'Check out Krishi Mitra - Connect directly with farmers and get fresh produce at fair prices! Download now: https://krishimitra.app',
-        title: 'Share Krishi Mitra',
+        message: 'Check out Krishika - Connect directly with farmers and get fresh produce at fair prices! Download now: https://krishimitra.app',
+        title: 'Share Krishika',
       })
     } catch (error) {
       console.log('Error sharing:', error)
@@ -146,7 +146,7 @@ const CProfile = () => {
   }
 
   const handleRateApp = () => {
-    Alert.alert('Rate App', 'Thank you for rating Krishi Mitra!')
+    Alert.alert('Rate App', 'Thank you for rating Krishika!')
   }
 
   const handleLogout = () => {
@@ -355,7 +355,7 @@ const CProfile = () => {
         <OptionItem
           icon="Share2"
           title="Share App"
-          description="Tell your friends about Krishi Mitra"
+          description="Tell your friends about Krishika"
           color="#E91E63"
           onPress={handleShareApp}
         />
@@ -379,7 +379,7 @@ const CProfile = () => {
 
       {/* App Info */}
       <View style={styles.appInfoSection}>
-        <Text style={styles.appVersion}>Krishi Mitra v2.1.0</Text>
+        <Text style={styles.appVersion}>Krishika v2.1.0</Text>
         <Text style={styles.appDescription}>
           Connecting farmers and consumers for a sustainable future
         </Text>

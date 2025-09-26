@@ -29,8 +29,8 @@ const heroSlides = [
     alt: "Fresh produce at Doorstep"
   },
   {
-    title: "Sow with Confidence, Grow with Krishi Mitra!",
-    description: "Inspiring farmers to plant with assurance and nurture their dreams into reality through the trusted support of Krishi Mitra.",
+    title: "Sow with Confidence, Grow with Krishika!",
+    description: "Inspiring farmers to plant with assurance and nurture their dreams into reality through the trusted support of Krishika.",
     image: "https://i.ibb.co/1YQX4Yvs/image.png",
     alt: "Your Field Companion"
   }
@@ -379,7 +379,7 @@ const CDashboard = () => {
 
       {/* Featured Section */}
       <View style={styles.featuredSection}>
-        <Text style={styles.sectionTitle}>Why Choose Krishi Mitra?</Text>
+        <Text style={styles.sectionTitle}>Why Choose Krishika?</Text>
         <View style={styles.featuresGrid}>
           <View style={styles.featureCard}>
             <Icon name="Shield" size={32} color="#4CAF50" />

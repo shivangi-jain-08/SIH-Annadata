@@ -9,6 +9,11 @@ import ParameterAnalysis from '../farmer/pages/ParameterAnalysis';
 import DiseaseDetection from '../farmer/pages/DiseaseDetection';
 import vDashboard from '../vendor/VDashboard';
 import ScreenWrapper from '../components/ScreenWrapper';
+import Terms from '../pages/Terms';
+import Privacy from '../pages/Privacy';
+import Contact from '../pages/Contact';
+import FAQ from '../pages/FAQ';
+import Settings from '../pages/Settings';
 
 const Stack = createStackNavigator();
 
@@ -18,6 +23,13 @@ const WrappedParameterAnalysis = () => <ScreenWrapper><ParameterAnalysis /></Scr
 const WrappedDiseaseDetection = () => <ScreenWrapper><DiseaseDetection /></ScreenWrapper>;
 const WrappedVDashboard = () => <ScreenWrapper><vDashboard /></ScreenWrapper>;
 
+// Wrapped pages without ChatBot
+const WrappedTerms = () => <ScreenWrapper showChatBot={false}><Terms /></ScreenWrapper>;
+const WrappedPrivacy = () => <ScreenWrapper showChatBot={false}><Privacy /></ScreenWrapper>;
+const WrappedContact = () => <ScreenWrapper showChatBot={false}><Contact /></ScreenWrapper>;
+const WrappedFAQ = () => <ScreenWrapper showChatBot={false}><FAQ /></ScreenWrapper>;
+const WrappedSettings = () => <ScreenWrapper showChatBot={false}><Settings /></ScreenWrapper>;
+
 const StackNavigation = () => {
   return (
     <NavigationContainer>
@@ -25,6 +37,11 @@ const StackNavigation = () => {
           <Stack.Screen name="Auth" component={Authorisation} />
           <Stack.Screen name="ChatBot" component={ChatBot} />
           <Stack.Screen name="Drawer" component={DrawerNavigation} />
+          <Stack.Screen name="Terms" component={WrappedTerms} />
+          <Stack.Screen name="Privacy" component={WrappedPrivacy} />
+          <Stack.Screen name="Contact" component={WrappedContact} />
+          <Stack.Screen name="FAQ" component={WrappedFAQ} />
+          <Stack.Screen name="Settings" component={WrappedSettings} />
 
           {/*Farmers*/}
           <Stack.Screen name="CropRecommendation" component={WrappedCropRecommendation} />

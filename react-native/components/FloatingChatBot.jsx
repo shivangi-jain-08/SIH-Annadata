@@ -102,7 +102,7 @@ const FloatingChatBot = () => {
             },
           ]}
         >
-          <Text style={styles.tooltipText}>Ask Krishi Mitra! 🌱</Text>
+          <Text style={styles.tooltipText}>Ask Krishika! 🌱</Text>
           <View style={styles.tooltipArrow} />
         </Animated.View>
       )}
@@ -124,7 +124,7 @@ const FloatingChatBot = () => {
           onPress={handlePress}
           activeOpacity={0.8}
         >
-          {/* Krishi Mitra Bot Icon */}
+          {/* Krishka Bot Icon */}
           <Icon name="BotMessageSquare" size={28} color="white" />
           
           {/* AI Assistant Badge */}

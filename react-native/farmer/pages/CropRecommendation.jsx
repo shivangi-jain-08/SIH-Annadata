@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, RefreshControl } from 'react-native'
 import Icon from '../../Icon'
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native'
+import HardwareService from '../../services/HardwareService'
+import CropHealthService from '../../services/CropHealthService'
+import CropHealthNotificationService from '../../services/CropHealthNotificationService'
 
 const ParameterCard = ({ icon, label, value, unit, color }) => {
   return (
@@ -50,14 +53,132 @@ const RecommendationItem = ({ crop, suitability, reason }) => {
   )
 }
 
+const CropHealthCard = ({ analysis }) => {
+  if (!analysis) return null
+
+  const getHealthColor = (status) => {
+    switch (status) {
+      case 'Excellent': return '#4CAF50'
+      case 'Good': return '#8BC34A'
+      case 'Fair': return '#FF9800'
+      case 'Poor': return '#FF5722'
+      case 'Critical': return '#F44336'
+      default: return '#666'
+    }
+  }
+
+  const getScoreColor = (score) => {
+    if (score >= 85) return '#4CAF50'
+    if (score >= 70) return '#8BC34A'
+    if (score >= 55) return '#FF9800'
+    if (score >= 40) return '#FF5722'
+    return '#F44336'
+  }
+
+  return (
+    <View style={styles.healthCard}>
+      <View style={styles.healthHeader}>
+        <Icon name="Activity" size={24} color={getHealthColor(analysis.healthStatus)} />
+        <Text style={styles.healthTitle}>Crop Health Analysis</Text>
+      </View>
+      
+      <View style={styles.healthScoreContainer}>
+        <View style={styles.scoreCircle}>
+          <Text style={[styles.healthScore, { color: getScoreColor(analysis.healthScore) }]}>
+            {analysis.healthScore}
+          </Text>
+          <Text style={styles.scoreLabel}>Health Score</Text>
+        </View>
+        <View style={styles.statusContainer}>
+          <Text style={[styles.healthStatus, { color: getHealthColor(analysis.healthStatus) }]}>
+            {analysis.healthStatus}
+          </Text>
+          <Text style={styles.healthOverview}>{analysis.analysis?.overview}</Text>
+        </View>
+      </View>
+
+      {analysis.analysis?.keyInsights && (
+        <View style={styles.insightsContainer}>
+          <Text style={styles.insightsTitle}>Key Insights:</Text>
+          {analysis.analysis.keyInsights.map((insight, index) => (
+            <View key={index} style={styles.insightItem}>
+              <Icon name="CheckCircle" size={14} color="#4CAF50" />
+              <Text style={styles.insightText}>{insight}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {analysis.analysis?.recommendations && (
+        <View style={styles.recommendationsContainer}>
+          <Text style={styles.recommendationsTitle}>Recommendations:</Text>
+          {analysis.analysis.recommendations.map((rec, index) => (
+            <View key={index} style={styles.recommendationPoint}>
+              <Icon name="ArrowRight" size={14} color="#FF9800" />
+              <Text style={styles.recommendationText}>{rec}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  )
+}
+
+const HardwareMessageCard = ({ message, index }) => {
+  if (!message || !message.sensorData) return null
+
+  const sensorSummary = HardwareService.getSensorSummary(message.sensorData)
+  const timeAgo = HardwareService.formatDate(message.createdAt)
+
+  return (
+    <View style={styles.hardwareMessageCard}>
+      <View style={styles.messageHeader}>
+        <Icon name="Database" size={20} color="#2196F3" />
+        <Text style={styles.messageTitle}>Sensor Reading #{index + 1}</Text>
+        <Text style={styles.messageTime}>{timeAgo}</Text>
+      </View>
+      
+      <View style={styles.sensorDataGrid}>
+        <View style={styles.sensorDataItem}>
+          <Text style={styles.sensorLabel}>pH</Text>
+          <Text style={styles.sensorValue}>{sensorSummary.ph}</Text>
+        </View>
+        <View style={styles.sensorDataItem}>
+          <Text style={styles.sensorLabel}>N</Text>
+          <Text style={styles.sensorValue}>{sensorSummary.nitrogen} ppm</Text>
+        </View>
+        <View style={styles.sensorDataItem}>
+          <Text style={styles.sensorLabel}>P</Text>
+          <Text style={styles.sensorValue}>{sensorSummary.phosphorus} ppm</Text>
+        </View>
+        <View style={styles.sensorDataItem}>
+          <Text style={styles.sensorLabel}>K</Text>
+          <Text style={styles.sensorValue}>{sensorSummary.potassium} ppm</Text>
+        </View>
+        <View style={styles.sensorDataItem}>
+          <Text style={styles.sensorLabel}>Temp</Text>
+          <Text style={styles.sensorValue}>{sensorSummary.temperature}°C</Text>
+        </View>
+        <View style={styles.sensorDataItem}>
+          <Text style={styles.sensorLabel}>Humidity</Text>
+          <Text style={styles.sensorValue}>{sensorSummary.humidity}%</Text>
+        </View>
+      </View>
+    </View>
+  )
+}
+
 const CropRecommendation = () => {
   const navigation = useNavigation();
 
-  const [isConnected, setIsConnected] = useState(true) // Mock IoT connection status
+  // State management
+  const [isConnected, setIsConnected] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
+  const [isFetchingData, setIsFetchingData] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [showRecommendations, setShowRecommendations] = useState(false)
 
-  // Mock IoT sensor data - in real app, this would come from bluetooth device
+  // Data state
   const [parameters, setParameters] = useState({
     nitrogen: 0.0,
     phosphorus: 0.0,
@@ -68,10 +189,11 @@ const CropRecommendation = () => {
     rainfall: 0.0
   })
   
-  const [isFetchingData, setIsFetchingData] = useState(false)
-
-  // Mock recommendations data
+  const [hardwareMessages, setHardwareMessages] = useState([])
+  const [cropRecommendations, setCropRecommendations] = useState([])
+  const [cropHealthAnalysis, setCropHealthAnalysis] = useState(null)
   const [recommendations, setRecommendations] = useState([])
+  const [lastDataFetch, setLastDataFetch] = useState(null)
 
   const parameterConfig = [
     { key: 'nitrogen', label: 'Nitrogen', unit: 'ppm', icon: 'Atom', color: '#2196F3' },
@@ -111,33 +233,144 @@ const CropRecommendation = () => {
     }
   ]
 
-  // Function to fetch dummy data from IoT device
-  const handleFetchDummyData = () => {
+  // Load initial data on component mount
+  useEffect(() => {
+    loadAllData()
+  }, [])
+
+  // Function to load all data from database
+  const loadAllData = async () => {
     setIsFetchingData(true)
-    
-    // Simulate IoT data fetching delay
-    setTimeout(() => {
-      setParameters({
-        nitrogen: 45.2 + (Math.random() - 0.5) * 10,
-        phosphorus: 38.7 + (Math.random() - 0.5) * 8,
-        potassium: 42.1 + (Math.random() - 0.5) * 9,
-        temperature: 26.5 + (Math.random() - 0.5) * 4,
-        humidity: 68.3 + (Math.random() - 0.5) * 15,
-        phLevel: 6.8 + (Math.random() - 0.5) * 1,
-        rainfall: 125.4 + (Math.random() - 0.5) * 30
-      })
+    try {
+      await Promise.all([
+        fetchHardwareMessages(),
+        fetchCropRecommendations()
+      ])
+      setLastDataFetch(new Date())
+    } catch (error) {
+      console.error('Error loading data:', error)
+      Alert.alert('Error', 'Failed to load some data. Using cached information.')
+    } finally {
       setIsFetchingData(false)
-    }, 1500) // 1.5 second delay to simulate fetching
+    }
   }
 
-  const handleGetRecommendations = () => {
+  // Function to fetch hardware messages from database
+  const fetchHardwareMessages = async () => {
+    try {
+      const messages = await HardwareService.getLatestHardwareMessages(5)
+      setHardwareMessages(messages)
+      
+      // Update parameters with latest sensor data
+      if (messages && messages.length > 0) {
+        const latestMessage = messages[0]
+        if (latestMessage.sensorData) {
+          setParameters({
+            nitrogen: latestMessage.sensorData.nitrogen || 0.0,
+            phosphorus: latestMessage.sensorData.phosphorus || 0.0,
+            potassium: latestMessage.sensorData.potassium || 0.0,
+            temperature: latestMessage.sensorData.temperature || 0.0,
+            humidity: latestMessage.sensorData.humidity || 0.0,
+            phLevel: latestMessage.sensorData.ph || 0.0,
+            rainfall: latestMessage.sensorData.rainfall || 0.0
+          })
+        }
+      }
+      
+      return messages
+    } catch (error) {
+      console.error('Error fetching hardware messages:', error)
+      throw error
+    }
+  }
+
+  // Function to fetch crop recommendations from database
+  const fetchCropRecommendations = async () => {
+    try {
+      const recommendations = await HardwareService.getLatestCropRecommendations(5)
+      setCropRecommendations(recommendations)
+      return recommendations
+    } catch (error) {
+      console.error('Error fetching crop recommendations:', error)
+      throw error
+    }
+  }
+
+  // Function to analyze crop health with Gemini
+  const analyzeCropHealth = async () => {
+    if (hardwareMessages.length === 0 || cropRecommendations.length === 0) {
+      Alert.alert('No Data', 'Please fetch hardware and crop recommendation data first.')
+      return
+    }
+
     setIsLoading(true)
-    // Simulate API call delay
-    setTimeout(() => {
-      setRecommendations(mockRecommendations)
+    try {
+      const analysis = await HardwareService.analyzeCropHealthWithGemini(
+        hardwareMessages,
+        cropRecommendations
+      )
+      
+      setCropHealthAnalysis(analysis)
+      
+      // Store the crop health data for use in other pages
+      const healthStored = await CropHealthService.storeCropHealth(analysis)
+      
+      if (healthStored) {
+        console.log('Crop health data stored successfully for cross-page access')
+        
+        // Notify other pages about the health update
+        CropHealthNotificationService.notifyHealthUpdate(analysis)
+      } else {
+        console.warn('Failed to store crop health data')
+      }
+      
+      // Format recommendations for display
+      const formattedRecommendations = cropRecommendations.length > 0 
+        ? cropRecommendations[0].recommendations?.map(rec => ({
+            crop: rec.cropName,
+            suitability: rec.suitabilityScore >= 80 ? 'High' : rec.suitabilityScore >= 60 ? 'Medium' : 'Low',
+            reason: `Suitability score: ${rec.suitabilityScore}%. ${
+              rec.suitabilityScore >= 80 
+                ? 'Excellent match for current soil conditions.' 
+                : rec.suitabilityScore >= 60 
+                ? 'Good match with some considerations needed.'
+                : 'May require significant soil improvements.'
+            }`
+          })) || []
+        : mockRecommendations
+
+      setRecommendations(formattedRecommendations)
       setShowRecommendations(true)
+      
+      // Show success message with health info
+      const notificationMessage = CropHealthNotificationService.getNotificationMessage(analysis)
+      Alert.alert(
+        'Analysis Complete', 
+        `${notificationMessage}\n\nThe updated health data is now available on your Dashboard and Crops pages.`,
+        [{ text: 'OK' }]
+      )
+      
+    } catch (error) {
+      console.error('Error analyzing crop health:', error)
+      Alert.alert('Analysis Error', 'Failed to analyze crop health. Please try again.')
+    } finally {
       setIsLoading(false)
-    }, 2000)
+    }
+  }
+
+  // Function to refresh all data
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await loadAllData()
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  // Function to fetch dummy data (keeping for backward compatibility)
+  const handleFetchDummyData = async () => {
+    await loadAllData()
   }
 
   const handleSaveParameters = () => {
@@ -197,7 +430,12 @@ const CropRecommendation = () => {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+      }
+    >
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
@@ -249,7 +487,7 @@ const CropRecommendation = () => {
 
       {/* Action Buttons */}
       <View style={styles.buttonSection}>
-        {/* Fetch Dummy Data Button */}
+        {/* Fetch Data Button */}
         <TouchableOpacity 
           style={[styles.button, styles.fetchDataButton]} 
           onPress={handleFetchDummyData}
@@ -263,25 +501,34 @@ const CropRecommendation = () => {
           ) : (
             <>
               <Icon name="Download" size={20} color="white" />
-              <Text style={styles.buttonText}>Fetch Dummy Data</Text>
+              <Text style={styles.buttonText}>Fetch Latest Data</Text>
             </>
           )}
         </TouchableOpacity>
+        
+        {lastDataFetch && (
+          <View style={styles.lastUpdateContainer}>
+            <Icon name="Clock" size={14} color="#666" />
+            <Text style={styles.lastUpdateText}>
+              Last updated: {HardwareService.formatDate(lastDataFetch)}
+            </Text>
+          </View>
+        )}
 
         <TouchableOpacity 
           style={[styles.button, styles.primaryButton]} 
-          onPress={handleGetRecommendations}
+          onPress={analyzeCropHealth}
           disabled={isLoading || !isConnected}
         >
           {isLoading ? (
             <>
               <Icon name="Loader" size={20} color="white" />
-              <Text style={styles.buttonText}>Analyzing...</Text>
+              <Text style={styles.buttonText}>Analyzing with Gemini...</Text>
             </>
           ) : (
             <>
-              <Icon name="Lightbulb" size={20} color="white" />
-              <Text style={styles.buttonText}>Get Recommendations</Text>
+              <Icon name="Brain" size={20} color="white" />
+              <Text style={styles.buttonText}>Analyze Crop Health</Text>
             </>
           )}
         </TouchableOpacity>
@@ -306,16 +553,84 @@ const CropRecommendation = () => {
         </View>
       </View>
 
-      {/* Recommendations Section */}
+      {/* Crop Health Analysis Section */}
+      {cropHealthAnalysis && (
+        <View style={styles.analysisSection}>
+          <CropHealthCard analysis={cropHealthAnalysis} />
+        </View>
+      )}
+
+      {/* Hardware Messages Section */}
+      {hardwareMessages.length > 0 && (
+        <View style={styles.hardwareSection}>
+          <View style={styles.sectionHeader}>
+            <Icon name="Database" size={24} color="#2196F3" />
+            <Text style={styles.sectionTitle}>Recent Sensor Data</Text>
+          </View>
+          <Text style={styles.sectionSubtitle}>
+            Latest readings from IoT sensors in your field
+          </Text>
+          
+          <View style={styles.hardwareMessagesList}>
+            {hardwareMessages.slice(0, 3).map((message, index) => (
+              <HardwareMessageCard
+                key={message._id || index}
+                message={message}
+                index={index}
+              />
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Crop Recommendations Section */}
+      {cropRecommendations.length > 0 && (
+        <View style={styles.cropRecommendationsSection}>
+          <View style={styles.sectionHeader}>
+            <Icon name="Leaf" size={24} color="#4CAF50" />
+            <Text style={styles.sectionTitle}>Database Crop Recommendations</Text>
+          </View>
+          <Text style={styles.sectionSubtitle}>
+            ML-generated suggestions based on your soil parameters
+          </Text>
+          
+          <View style={styles.dbRecommendationsList}>
+            {cropRecommendations.map((recGroup, groupIndex) => (
+              <View key={recGroup._id || groupIndex} style={styles.recommendationGroup}>
+                <Text style={styles.recommendationGroupHeader}>
+                  Analysis from {HardwareService.formatDate(recGroup.createdAt)}
+                </Text>
+                {recGroup.recommendations?.map((rec, index) => (
+                  <View key={index} style={styles.dbRecommendationItem}>
+                    <View style={styles.cropNameContainer}>
+                      <Icon name="Leaf" size={16} color="#4CAF50" />
+                      <Text style={styles.dbCropName}>{rec.cropName}</Text>
+                    </View>
+                    <View style={styles.suitabilityScoreContainer}>
+                      <Text style={[
+                        styles.suitabilityScore,
+                        { color: rec.suitabilityScore >= 80 ? '#4CAF50' : rec.suitabilityScore >= 60 ? '#FF9800' : '#F44336' }
+                      ]}>
+                        {rec.suitabilityScore}%
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* AI Recommendations Section */}
       {showRecommendations && recommendations.length > 0 && (
         <View style={styles.recommendationsSection}>
           <View style={styles.recommendationsHeader}>
-            <Icon name=
-            "Target" size={24} color="#4CAF50" />
-            <Text style={styles.sectionTitle}>Crop Recommendations</Text>
+            <Icon name="Target" size={24} color="#4CAF50" />
+            <Text style={styles.sectionTitle}>AI-Powered Recommendations</Text>
           </View>
           <Text style={styles.sectionSubtitle}>
-            Based on current soil and environmental conditions
+            Gemini AI analysis based on current soil and environmental conditions
           </Text>
           
           <View style={styles.recommendationsList}>
@@ -328,6 +643,17 @@ const CropRecommendation = () => {
               />
             ))}
           </View>
+        </View>
+      )}
+
+      {/* Empty State */}
+      {!isFetchingData && !isLoading && hardwareMessages.length === 0 && cropRecommendations.length === 0 && (
+        <View style={styles.emptyState}>
+          <Icon name="Database" size={48} color="#ccc" />
+          <Text style={styles.emptyStateText}>No sensor data available</Text>
+          <Text style={styles.emptyStateSubtext}>
+            Fetch the latest data from your IoT sensors to get started
+          </Text>
         </View>
       )}
     </ScrollView>
@@ -495,10 +821,245 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 
-  // Recommendations Section
+  // Last Update Container
+  lastUpdateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 20,
+    alignSelf: 'center',
+  },
+  lastUpdateText: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 4,
+  },
+
+  // Section Headers
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+
+  // Analysis Section
+  analysisSection: {
+    paddingHorizontal: 20,
+    paddingTop: 25,
+  },
+
+  // Health Card Styles
+  healthCard: {
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 20,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  healthHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  healthTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginLeft: 10,
+  },
+  healthScoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  scoreCircle: {
+    alignItems: 'center',
+    marginRight: 20,
+  },
+  healthScore: {
+    fontSize: 32,
+    fontWeight: 'bold',
+  },
+  scoreLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+  },
+  statusContainer: {
+    flex: 1,
+  },
+  healthStatus: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  healthOverview: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+  },
+  insightsContainer: {
+    marginBottom: 15,
+  },
+  insightsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 10,
+  },
+  insightItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  insightText: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 8,
+    flex: 1,
+    lineHeight: 18,
+  },
+  recommendationsContainer: {
+    marginTop: 5,
+  },
+  recommendationsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 10,
+  },
+  recommendationPoint: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  recommendationText: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 8,
+    flex: 1,
+    lineHeight: 18,
+  },
+
+  // Hardware Messages Section
+  hardwareSection: {
+    paddingHorizontal: 20,
+    paddingTop: 25,
+  },
+  hardwareMessagesList: {
+    gap: 12,
+  },
+  hardwareMessageCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  messageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  messageTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginLeft: 8,
+    flex: 1,
+  },
+  messageTime: {
+    fontSize: 12,
+    color: '#666',
+  },
+  sensorDataGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  sensorDataItem: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
+    padding: 8,
+    alignItems: 'center',
+    width: '30%',
+  },
+  sensorLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 2,
+  },
+  sensorValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+
+  // Crop Recommendations Section
+  cropRecommendationsSection: {
+    paddingHorizontal: 20,
+    paddingTop: 25,
+  },
+  dbRecommendationsList: {
+    gap: 15,
+  },
+  recommendationGroup: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  recommendationGroupHeader: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 12,
+  },
+  dbRecommendationItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  cropNameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  dbCropName: {
+    fontSize: 16,
+    color: '#333',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  suitabilityScoreContainer: {
+    alignItems: 'center',
+  },
+  suitabilityScore: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // AI Recommendations Section
   recommendationsSection: {
     paddingHorizontal: 20,
-    paddingTop: 30,
+    paddingTop: 25,
     paddingBottom: 30,
   },
   recommendationsHeader: {
@@ -544,6 +1105,26 @@ const styles = StyleSheet.create({
   reasonText: {
     fontSize: 14,
     color: '#666',
+    lineHeight: 20,
+  },
+
+  // Empty State
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#999',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
     lineHeight: 20,
   },
 })

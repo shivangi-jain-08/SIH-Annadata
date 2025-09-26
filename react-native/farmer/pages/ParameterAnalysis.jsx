@@ -1,7 +1,9 @@
-import React, { useState } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native'
-import { useRoute, useNavigation } from '@react-navigation/native'
+import React, { useState, useEffect } from 'react'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl } from 'react-native'
+import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native'
 import Svg, { Line, Circle, Text as SvgText, Polyline } from 'react-native-svg'
+import HardwareService from '../../services/HardwareService'
+import CropHealthService from '../../services/CropHealthService'
 import Icon from '../../Icon'
 
 const { width } = Dimensions.get('window')
@@ -125,20 +127,25 @@ const ParameterAnalysis = () => {
   const route = useRoute()
   const navigation = useNavigation()
   const [selectedParameter, setSelectedParameter] = useState('nitrogen')
+  const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [hardwareMessages, setHardwareMessages] = useState([])
+  const [cropHealthData, setCropHealthData] = useState(null)
+  const [error, setError] = useState(null)
   
   // Get parameters from navigation params
   const { parameters, parameterConfig } = route.params || {}
   
-  // Last saved parameters (mock data - in real app would come from storage/database)
-  const lastSavedParameters = {
-    nitrogen: 42.8,
-    phosphorus: 35.2,
-    potassium: 39.6,
-    temperature: 24.7,
-    humidity: 62.4,
-    phLevel: 6.5,
-    rainfall: 118.2
-  }
+  // Current parameters from latest hardware message
+  const [currentParameters, setCurrentParameters] = useState({
+    nitrogen: 0,
+    phosphorus: 0,
+    potassium: 0,
+    temperature: 0,
+    humidity: 0,
+    phLevel: 0,
+    rainfall: 0
+  })
   
   // Default parameter configuration if not passed
   const defaultParameterConfig = [
@@ -151,36 +158,157 @@ const ParameterAnalysis = () => {
     { key: 'rainfall', label: 'Rainfall', unit: 'mm', icon: 'CloudRain', color: '#607D8B' }
   ]
   
-  // Use passed parameters or fall back to last saved parameters
-  const currentParameters = parameters || lastSavedParameters
   const currentConfig = parameterConfig || defaultParameterConfig
   
-  // Check if we're showing last saved data
-  const isShowingLastSaved = !parameters
+  // Check if we're showing passed parameters or real hardware data
+  const isShowingPassedParameters = !!parameters
 
-  // Mock historical data for the last 7 days
-  const generateHistoricalData = (baseValue, paramKey) => {
-    const data = []
-    for (let i = 6; i >= 0; i--) {
-      const variation = (Math.random() - 0.5) * (baseValue * 0.3) // 30% variation
-      const value = Math.max(0, baseValue + variation)
-      data.push({
-        date: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        value: value
-      })
+  // Fetch hardware messages and crop health data
+  const fetchData = async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+
+      // Fetch hardware messages (last 20 for better historical data)
+      const messages = await HardwareService.getLatestHardwareMessages(20)
+      setHardwareMessages(messages)
+
+      // Extract current parameters from the latest message
+      if (messages.length > 0) {
+        const latestMessage = messages[0]
+        const sensorData = latestMessage.sensorData || {}
+        
+        setCurrentParameters({
+          nitrogen: sensorData.nitrogen || 0,
+          phosphorus: sensorData.phosphorus || 0,
+          potassium: sensorData.potassium || 0,
+          temperature: sensorData.temperature || 0,
+          humidity: sensorData.humidity || 0,
+          phLevel: sensorData.ph || 0,
+          rainfall: sensorData.rainfall || 0
+        })
+      }
+
+      // Fetch crop health data
+      const healthData = await CropHealthService.getCropHealth()
+      setCropHealthData(healthData)
+
+      // If no health data exists, generate it from hardware data
+      if (!healthData && messages.length > 0) {
+        const cropRecommendations = await HardwareService.getLatestCropRecommendations(5)
+        const newHealthAnalysis = await HardwareService.analyzeCropHealthWithGemini(messages, cropRecommendations)
+        
+        // Store the new analysis
+        await CropHealthService.storeCropHealth(newHealthAnalysis)
+        setCropHealthData(newHealthAnalysis)
+      }
+
+    } catch (err) {
+      console.error('Error fetching data:', err)
+      setError('Failed to load agricultural data. Please try again.')
+    } finally {
+      setIsLoading(false)
     }
-    return data
+  }
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    await fetchData()
+    setIsRefreshing(false)
+  }
+
+  // Load data when component mounts or comes into focus
+  useEffect(() => {
+    if (!isShowingPassedParameters) {
+      fetchData()
+    } else {
+      setIsLoading(false)
+      setCurrentParameters(parameters)
+    }
+  }, [isShowingPassedParameters])
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!isShowingPassedParameters) {
+        fetchData()
+      }
+    }, [isShowingPassedParameters])
+  )
+
+  // Generate historical data from hardware messages
+  const generateHistoricalData = (paramKey) => {
+    if (isShowingPassedParameters) {
+      // For passed parameters, generate mock historical data
+      const baseValue = parameters[paramKey] || 50
+      const data = []
+      for (let i = 6; i >= 0; i--) {
+        const variation = (Math.random() - 0.5) * (baseValue * 0.3) // 30% variation
+        const value = Math.max(0, baseValue + variation)
+        data.push({
+          date: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          value: value
+        })
+      }
+      return data
+    }
+
+    // Use real hardware messages for historical data
+    if (!hardwareMessages || hardwareMessages.length === 0) {
+      return []
+    }
+
+    const data = hardwareMessages
+      .slice(0, 10) // Use last 10 data points
+      .reverse() // Reverse to show oldest to newest
+      .map(message => {
+        const sensorData = message.sensorData || {}
+        let value = 0
+
+        switch (paramKey) {
+          case 'nitrogen':
+            value = sensorData.nitrogen || 0
+            break
+          case 'phosphorus':
+            value = sensorData.phosphorus || 0
+            break
+          case 'potassium':
+            value = sensorData.potassium || 0
+            break
+          case 'temperature':
+            value = sensorData.temperature || 0
+            break
+          case 'humidity':
+            value = sensorData.humidity || 0
+            break
+          case 'phLevel':
+            value = sensorData.ph || 0
+            break
+          case 'rainfall':
+            value = sensorData.rainfall || 0
+            break
+          default:
+            value = 0
+        }
+
+        return {
+          date: new Date(message.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          value: value,
+          timestamp: message.createdAt
+        }
+      })
+
+    return data.length > 0 ? data : []
   }
 
   // Generate historical data for all parameters
   const historicalData = {
-    nitrogen: generateHistoricalData(currentParameters.nitrogen, 'nitrogen'),
-    phosphorus: generateHistoricalData(currentParameters.phosphorus, 'phosphorus'),
-    potassium: generateHistoricalData(currentParameters.potassium, 'potassium'),
-    temperature: generateHistoricalData(currentParameters.temperature, 'temperature'),
-    humidity: generateHistoricalData(currentParameters.humidity, 'humidity'),
-    phLevel: generateHistoricalData(currentParameters.phLevel, 'phLevel'),
-    rainfall: generateHistoricalData(currentParameters.rainfall, 'rainfall')
+    nitrogen: generateHistoricalData('nitrogen'),
+    phosphorus: generateHistoricalData('phosphorus'),
+    potassium: generateHistoricalData('potassium'),
+    temperature: generateHistoricalData('temperature'),
+    humidity: generateHistoricalData('humidity'),
+    phLevel: generateHistoricalData('phLevel'),
+    rainfall: generateHistoricalData('rainfall')
   }
   
   // Analysis logic for each parameter
@@ -235,6 +363,20 @@ const ParameterAnalysis = () => {
 
   // Calculate overall health score
   const calculateOverallHealth = () => {
+    // If we have Gemini crop health data, use that
+    if (cropHealthData && cropHealthData.healthScore) {
+      return {
+        score: cropHealthData.healthScore,
+        status: cropHealthData.healthStatus,
+        criticalIssues: cropHealthData.analysis?.risks || [],
+        warnings: [],
+        recommendations: cropHealthData.analysis?.recommendations || [],
+        geminiAnalysis: true,
+        keyInsights: cropHealthData.analysis?.keyInsights || []
+      }
+    }
+
+    // Fallback to parameter-based calculation
     let totalScore = 0
     let criticalIssues = []
     let warnings = []
@@ -287,9 +429,10 @@ const ParameterAnalysis = () => {
     }
 
     // Add data source specific recommendations
-    if (isShowingLastSaved) {
-      recommendations.push('Consider taking fresh measurements for updated analysis.')
-      recommendations.push('Regular monitoring helps track soil condition changes.')
+    if (isShowingPassedParameters) {
+      recommendations.push('Data from previous analysis - consider taking fresh measurements.')
+    } else if (!isLoading && hardwareMessages.length === 0) {
+      recommendations.push('No recent sensor data available - check hardware connections.')
     }
 
     return {
@@ -297,14 +440,34 @@ const ParameterAnalysis = () => {
       status: overallScore >= 80 ? 'Excellent' : overallScore >= 60 ? 'Good' : overallScore >= 40 ? 'Fair' : 'Poor',
       criticalIssues,
       warnings,
-      recommendations
+      recommendations,
+      geminiAnalysis: false
     }
   }
 
   const overallHealth = calculateOverallHealth()
 
+  if (isLoading && !isShowingPassedParameters) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2196F3" />
+        <Text style={styles.loadingText}>Loading agricultural data...</Text>
+      </View>
+    )
+  }
+
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          colors={['#2196F3']}
+          tintColor="#2196F3"
+        />
+      }
+    >
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
@@ -314,29 +477,114 @@ const ParameterAnalysis = () => {
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerTitle}>Parameter Analysis</Text>
             <Text style={styles.headerSubtitle}>
-              {isShowingLastSaved 
-                ? 'Analysis based on last saved parameters' 
-                : 'Detailed analysis of soil and environmental conditions'}
+              {isShowingPassedParameters 
+                ? 'Analysis based on previous sensor data' 
+                : hardwareMessages.length > 0
+                  ? `Real-time analysis from ${hardwareMessages.length} sensor readings`
+                  : 'Agricultural parameter analysis'}
             </Text>
           </View>
+          {!isShowingPassedParameters && (
+            <TouchableOpacity style={styles.refreshButton} onPress={handleRefresh}>
+              <Icon name="RefreshCw" size={20} color="white" />
+            </TouchableOpacity>
+          )}
         </View>
         
         {/* Data Source Indicator */}
-        {isShowingLastSaved && (
-          <View style={styles.dataSourceIndicator}>
-            <Icon name="Database" size={16} color="#FFC107" />
-            <Text style={styles.dataSourceText}>
-              Showing last saved parameters from previous session
-            </Text>
+        <View style={styles.dataSourceIndicator}>
+          <Icon 
+            name={isShowingPassedParameters ? "Database" : hardwareMessages.length > 0 ? "Wifi" : "WifiOff"} 
+            size={16} 
+            color={isShowingPassedParameters ? "#FFC107" : hardwareMessages.length > 0 ? "#4CAF50" : "#F44336"} 
+          />
+          <Text style={[styles.dataSourceText, {
+            color: isShowingPassedParameters ? "#FFC107" : hardwareMessages.length > 0 ? "#4CAF50" : "#F44336"
+          }]}>
+            {isShowingPassedParameters 
+              ? 'Historical parameter data'
+              : hardwareMessages.length > 0
+                ? `Live sensor data (${HardwareService.formatDate(hardwareMessages[0]?.createdAt)})`
+                : 'No recent sensor data available'
+            }
+          </Text>
+        </View>
+
+        {error && (
+          <View style={styles.errorIndicator}>
+            <Icon name="AlertCircle" size={16} color="#F44336" />
+            <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
       </View>
+
+      {/* Crop Health Analysis Section */}
+      {cropHealthData && (
+        <View style={styles.cropHealthSection}>
+          <Text style={styles.sectionTitle}>🌾 AI Crop Health Analysis</Text>
+          <Text style={styles.sectionSubtitle}>
+            Gemini AI analysis of your crop conditions
+          </Text>
+          
+          <View style={styles.cropHealthCard}>
+            <View style={styles.cropHealthHeader}>
+              <View style={styles.cropHealthScore}>
+                <Text style={styles.cropHealthScoreNumber}>{cropHealthData.healthScore}</Text>
+                <Text style={styles.cropHealthScoreLabel}>Health Score</Text>
+              </View>
+              <View style={styles.cropHealthStatus}>
+                <Text style={[styles.cropHealthStatusText, { 
+                  color: CropHealthService.getHealthColor(cropHealthData.healthScore) 
+                }]}>
+                  {cropHealthData.healthStatus}
+                </Text>
+                <Text style={styles.cropHealthLastUpdated}>
+                  Last analyzed: {HardwareService.formatDate(cropHealthData.lastUpdated)}
+                </Text>
+              </View>
+            </View>
+
+            {cropHealthData.analysis?.overview && (
+              <Text style={styles.cropHealthOverview}>
+                {cropHealthData.analysis.overview}
+              </Text>
+            )}
+
+            {cropHealthData.analysis?.keyInsights && cropHealthData.analysis.keyInsights.length > 0 && (
+              <View style={styles.insightsContainer}>
+                <Text style={styles.insightsTitle}>🔍 Key Insights</Text>
+                {cropHealthData.analysis.keyInsights.slice(0, 3).map((insight, index) => (
+                  <View key={index} style={styles.insightItem}>
+                    <Icon name="ChevronRight" size={12} color="#666" />
+                    <Text style={styles.insightText}>{insight}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {cropHealthData.analysis?.optimalCrops && cropHealthData.analysis.optimalCrops.length > 0 && (
+              <View style={styles.optimalCropsContainer}>
+                <Text style={styles.optimalCropsTitle}>🌱 Recommended Crops</Text>
+                <View style={styles.cropsList}>
+                  {cropHealthData.analysis.optimalCrops.map((crop, index) => (
+                    <View key={index} style={styles.cropChip}>
+                      <Text style={styles.cropChipText}>{crop}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+      )}
 
       {/* Analysis Section */}
       <View style={styles.analysisSection}>
         <Text style={styles.sectionTitle}>Detailed Parameter Analysis</Text>
         <Text style={styles.sectionSubtitle}>
-          Analysis based on optimal ranges for agricultural conditions
+          {isShowingPassedParameters 
+            ? 'Analysis based on previous sensor measurements' 
+            : `Analysis based on ${hardwareMessages.length > 0 ? 'real-time' : 'optimal'} ranges for agricultural conditions`}
         </Text>
         
         <View style={styles.parametersGrid}>
@@ -447,8 +695,15 @@ const ParameterAnalysis = () => {
         {/* Recommendations */}
         <View style={styles.recommendationsCard}>
           <View style={styles.recommendationsHeader}>
-            <Icon name="Lightbulb" size={20} color="#4CAF50" />
-            <Text style={styles.recommendationsTitle}>Recommendations</Text>
+            <Icon name={overallHealth.geminiAnalysis ? "Zap" : "Lightbulb"} size={20} color="#4CAF50" />
+            <Text style={styles.recommendationsTitle}>
+              {overallHealth.geminiAnalysis ? 'AI-Powered Recommendations' : 'Recommendations'}
+            </Text>
+            {overallHealth.geminiAnalysis && (
+              <View style={styles.aiIndicator}>
+                <Text style={styles.aiIndicatorText}>AI</Text>
+              </View>
+            )}
           </View>
           
           {overallHealth.recommendations.map((recommendation, index) => (
@@ -457,6 +712,18 @@ const ParameterAnalysis = () => {
               <Text style={styles.recommendationText}>{recommendation}</Text>
             </View>
           ))}
+
+          {overallHealth.keyInsights && overallHealth.keyInsights.length > 0 && (
+            <View style={styles.additionalInsights}>
+              <Text style={styles.additionalInsightsTitle}>Additional Insights</Text>
+              {overallHealth.keyInsights.slice(0, 3).map((insight, index) => (
+                <View key={index} style={styles.recommendationItem}>
+                  <Icon name="Info" size={14} color="#2196F3" />
+                  <Text style={[styles.recommendationText, { color: '#2196F3' }]}>{insight}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       </View>
     </ScrollView>
@@ -795,6 +1062,178 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginLeft: 8,
     flex: 1,
+  },
+
+  // Loading States
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+  },
+
+  // Header Enhancements
+  refreshButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 8,
+    padding: 8,
+    marginLeft: 10,
+  },
+  errorIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(244, 67, 54, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(244, 67, 54, 0.4)',
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#F44336',
+    marginLeft: 6,
+    fontWeight: '500',
+  },
+
+  // Crop Health Section
+  cropHealthSection: {
+    paddingHorizontal: 20,
+    paddingTop: 25,
+  },
+  cropHealthCard: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    marginBottom: 10,
+  },
+  cropHealthHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cropHealthScore: {
+    alignItems: 'center',
+    marginRight: 20,
+  },
+  cropHealthScoreNumber: {
+    fontSize: 40,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+  },
+  cropHealthScoreLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+  },
+  cropHealthStatus: {
+    flex: 1,
+  },
+  cropHealthStatusText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  cropHealthLastUpdated: {
+    fontSize: 12,
+    color: '#999',
+  },
+  cropHealthOverview: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+    marginBottom: 16,
+    backgroundColor: '#F8F9FA',
+    padding: 12,
+    borderRadius: 8,
+  },
+  insightsContainer: {
+    marginBottom: 16,
+  },
+  insightsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  insightItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 6,
+  },
+  insightText: {
+    fontSize: 13,
+    color: '#666',
+    lineHeight: 18,
+    marginLeft: 6,
+    flex: 1,
+  },
+  optimalCropsContainer: {
+    marginTop: 8,
+  },
+  optimalCropsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  cropsList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  cropChip: {
+    backgroundColor: '#E8F5E8',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
+  },
+  cropChipText: {
+    fontSize: 12,
+    color: '#2E7D32',
+    fontWeight: '500',
+  },
+
+  // AI Indicator
+  aiIndicator: {
+    backgroundColor: '#2196F3',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  aiIndicatorText: {
+    fontSize: 10,
+    color: 'white',
+    fontWeight: 'bold',
+  },
+
+  // Additional Insights
+  additionalInsights: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  additionalInsightsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2196F3',
+    marginBottom: 8,
   },
 })
 
