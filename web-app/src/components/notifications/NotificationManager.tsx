@@ -6,21 +6,25 @@ import { useAuth } from '@/contexts/AuthContext';
 export function NotificationManager() {
   const { user } = useAuth();
   
+  // Always call hooks at the top level
+  let webSocket;
+  try {
+    webSocket = useWebSocket();
+  } catch (error) {
+    // WebSocket not available
+    console.warn('WebSocket not available:', error);
+    webSocket = { notifications: [], acknowledgeNotification: () => {} };
+  }
+
+  const { notifications, acknowledgeNotification } = webSocket;
+  
   // Only show notifications for consumers
   if (user?.role !== 'consumer') {
     return null;
   }
 
-  let notifications = [];
-  let acknowledgeNotification = (id: string) => {};
-
-  try {
-    const webSocket = useWebSocket();
-    notifications = webSocket.notifications;
-    acknowledgeNotification = webSocket.acknowledgeNotification;
-  } catch (error) {
-    // WebSocket not available, use empty state
-    console.warn('WebSocket not available:', error);
+  // If no notifications, don't render anything
+  if (!notifications || notifications.length === 0) {
     return null;
   }
 

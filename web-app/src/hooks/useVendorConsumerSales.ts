@@ -46,12 +46,17 @@ interface DeliveryOpportunity {
   items?: string[];
   preferredItems?: string[];
   estimatedDeliveryTime?: string;
+  estimatedValue?: number;
+  products?: string[];
+  timestamp?: string;
 }
 
 interface VendorStatus {
   isOnline: boolean;
   deliveryRadius: number;
   acceptingOrders: boolean;
+  onlineSince?: string;
+  totalOnlineTime?: number;
   currentLocation?: {
     latitude: number;
     longitude: number;
@@ -194,10 +199,20 @@ export function useConsumerSalesStats() {
     setError(null);
 
     try {
-      const response = await api.get('/products/consumer-sales-stats');
+      const response = await api.get('/analytics/vendor-dashboard');
       
       if (response.data.success) {
-        setStats(response.data.data);
+        const data = response.data.data.stats;
+        const mappedStats: ConsumerSalesStats = {
+          totalConsumerOrders: data.orders.total,
+          pendingOrders: data.orders.pending,
+          confirmedOrders: data.orders.completed,
+          deliveredOrders: data.orders.completed,
+          totalRevenue: data.revenue.total,
+          monthlyOrders: data.orders.monthly,
+          monthlyRevenue: data.revenue.monthly
+        };
+        setStats(mappedStats);
       } else {
         throw new Error(response.data.message || 'Failed to fetch consumer sales stats');
       }
@@ -245,8 +260,37 @@ export function useDeliveryOpportunities(location?: { latitude: number; longitud
     setError(null);
 
     try {
-      // This would typically call an API endpoint for delivery opportunities
-      // For now, we'll use mock data
+      const response = await api.get('/location/delivery-opportunities', {
+        params: {
+          latitude: location.latitude,
+          longitude: location.longitude
+        }
+      });
+
+      if (response.data.success) {
+        const apiOpportunities = response.data.data.map((opp: any) => ({
+          id: opp.id,
+          type: opp.type,
+          consumerName: opp.consumerName,
+          distance: opp.distance,
+          priority: opp.priority,
+          orderValue: opp.orderValue,
+          items: opp.items,
+          preferredItems: opp.preferredItems,
+          estimatedDeliveryTime: opp.estimatedDeliveryTime,
+          estimatedValue: opp.orderValue,
+          products: opp.items,
+          timestamp: opp.orderDate || new Date().toISOString()
+        }));
+        setOpportunities(apiOpportunities);
+      } else {
+        throw new Error(response.data.message || 'Failed to fetch delivery opportunities');
+      }
+    } catch (err) {
+      console.error('Failed to fetch delivery opportunities:', err);
+      setError(err instanceof Error ? err : new Error('Failed to fetch delivery opportunities'));
+      
+      // Fallback to mock data for development
       const mockOpportunities: DeliveryOpportunity[] = [
         {
           id: '1',
@@ -256,7 +300,10 @@ export function useDeliveryOpportunities(location?: { latitude: number; longitud
           priority: 'high',
           orderValue: 180,
           items: ['Tomatoes', 'Onions', 'Potatoes'],
-          estimatedDeliveryTime: '15 minutes'
+          estimatedDeliveryTime: '15 minutes',
+          estimatedValue: 180,
+          products: ['Tomatoes', 'Onions', 'Potatoes'],
+          timestamp: new Date().toISOString()
         },
         {
           id: '2',
@@ -265,25 +312,11 @@ export function useDeliveryOpportunities(location?: { latitude: number; longitud
           distance: 1200,
           priority: 'medium',
           preferredItems: ['Fresh vegetables', 'Fruits'],
-          estimatedDeliveryTime: '20 minutes'
-        },
-        {
-          id: '3',
-          type: 'pending_order',
-          consumerName: 'Lisa Zhang',
-          distance: 890,
-          priority: 'medium',
-          orderValue: 95,
-          items: ['Spinach', 'Carrots'],
-          estimatedDeliveryTime: '18 minutes'
+          estimatedDeliveryTime: '20 minutes',
+          timestamp: new Date().toISOString()
         }
       ];
-
       setOpportunities(mockOpportunities);
-    } catch (err) {
-      console.error('Failed to fetch delivery opportunities:', err);
-      setError(err instanceof Error ? err : new Error('Failed to fetch delivery opportunities'));
-      setOpportunities([]);
     } finally {
       setLoading(false);
     }
@@ -360,25 +393,236 @@ export function useVendorStatus() {
   };
 }
 
+// New hook for real vendor location status
+export function useVendorLocationStatus() {
+  const [status, setStatus] = useState<VendorStatus>({
+    isOnline: false,
+    deliveryRadius: 2000,
+    acceptingOrders: true
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  // Fetch current vendor status
+  const fetchStatus = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await api.get('/location/vendor-status');
+      
+      if (response.data.success) {
+        const data = response.data.data;
+        setStatus({
+          isOnline: data.isOnline,
+          deliveryRadius: data.deliveryRadius,
+          acceptingOrders: data.acceptingOrders,
+          currentLocation: data.location ? {
+            latitude: data.location.coordinates[1],
+            longitude: data.location.coordinates[0]
+          } : undefined,
+          onlineSince: data.onlineSince,
+          totalOnlineTime: data.totalOnlineTime,
+          rating: data.rating,
+          completedDeliveries: data.completedDeliveries
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch vendor status:', err);
+      setError(err instanceof Error ? err : new Error('Failed to fetch vendor status'));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Go online with location
+  const goOnline = useCallback(async (location?: { latitude: number; longitude: number }) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      let coords = location;
+      if (!coords && navigator.geolocation) {
+        coords = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(
+            (position) => resolve({
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude
+            }),
+            reject,
+            { enableHighAccuracy: true, timeout: 10000 }
+          );
+        });
+      }
+
+      if (!coords) {
+        throw new Error('Location is required to go online');
+      }
+
+      const response = await api.patch('/location/vendor-status', {
+        isOnline: true,
+        longitude: coords.longitude,
+        latitude: coords.latitude,
+        acceptingOrders: status.acceptingOrders,
+        deliveryRadius: status.deliveryRadius
+      });
+
+      if (response.data.success) {
+        const data = response.data.data;
+        setStatus(prev => ({
+          ...prev,
+          isOnline: true,
+          currentLocation: coords,
+          onlineSince: data.onlineSince
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to go online:', err);
+      setError(err instanceof Error ? err : new Error('Failed to go online'));
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [status.acceptingOrders, status.deliveryRadius]);
+
+  // Go offline
+  const goOffline = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await api.patch('/location/vendor-status', {
+        isOnline: false
+      });
+
+      if (response.data.success) {
+        setStatus(prev => ({
+          ...prev,
+          isOnline: false,
+          currentLocation: undefined
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to go offline:', err);
+      setError(err instanceof Error ? err : new Error('Failed to go offline'));
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Update delivery settings
+  const updateDeliverySettings = useCallback(async (settings: {
+    deliveryRadius?: number;
+    acceptingOrders?: boolean;
+  }) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await api.patch('/location/vendor-status', {
+        ...settings,
+        isOnline: status.isOnline,
+        ...(status.currentLocation && {
+          longitude: status.currentLocation.longitude,
+          latitude: status.currentLocation.latitude
+        })
+      });
+
+      if (response.data.success) {
+        setStatus(prev => ({
+          ...prev,
+          ...settings
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to update delivery settings:', err);
+      setError(err instanceof Error ? err : new Error('Failed to update delivery settings'));
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [status.isOnline, status.currentLocation]);
+
+  // Update location while online
+  const updateLocation = useCallback(async (location: { latitude: number; longitude: number }) => {
+    try {
+      if (!status.isOnline) {
+        throw new Error('Must be online to update location');
+      }
+
+      const response = await api.post('/location/update', {
+        longitude: location.longitude,
+        latitude: location.latitude
+      });
+
+      if (response.data.success) {
+        setStatus(prev => ({
+          ...prev,
+          currentLocation: location
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to update location:', err);
+      setError(err instanceof Error ? err : new Error('Failed to update location'));
+      throw err;
+    }
+  }, [status.isOnline]);
+
+  // Load status on mount
+  useEffect(() => {
+    fetchStatus();
+  }, [fetchStatus]);
+
+  return {
+    status,
+    loading,
+    error,
+    goOnline,
+    goOffline,
+    updateDeliverySettings,
+    updateLocation,
+    refetch: fetchStatus
+  };
+}
+
 export function useProximityNotifications() {
   const [sending, setSending] = useState(false);
 
   const sendProximityNotification = useCallback(async (data: {
     latitude: number;
     longitude: number;
-    message: string;
+    message?: string;
+    products?: string[];
   }) => {
     setSending(true);
     try {
-      // This would typically call an API to send proximity notifications
-      // For now, we'll just simulate the action
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      console.log('Proximity notification sent:', data);
-      alert('Proximity notification sent to nearby consumers!');
+      const response = await api.post('/location/notify-proximity', {
+        latitude: data.latitude,
+        longitude: data.longitude,
+        message: data.message || 'Fresh products available for delivery!',
+        products: data.products
+      });
+
+      if (response.data.success) {
+        const result = response.data.data;
+        console.log('Proximity notification sent:', result);
+        
+        // Show success message with details
+        const notificationCount = result.notificationsSent || 0;
+        if (notificationCount > 0) {
+          alert(`Proximity notification sent to ${notificationCount} nearby consumers!`);
+        } else {
+          alert('No consumers nearby to notify at this time.');
+        }
+        
+        return result;
+      } else {
+        throw new Error(response.data.message || 'Failed to send proximity notification');
+      }
     } catch (error) {
       console.error('Failed to send proximity notification:', error);
-      alert('Failed to send proximity notification. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send proximity notification. Please try again.';
+      alert(errorMessage);
+      throw error;
     } finally {
       setSending(false);
     }

@@ -6,11 +6,18 @@ const logger = require('../utils/logger');
  */
 const createProduct = async (req, res) => {
   try {
-    // For testing without auth, use mock user ID
-    const sellerId = req.user ? req.user._id : '507f1f77bcf86cd799439011';
+    // Ensure user is authenticated
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
     
-    // Check if user is farmer or vendor (skip for testing)
-    if (req.user && !['farmer', 'vendor'].includes(req.user.role)) {
+    const sellerId = req.user._id;
+    
+    // Check if user is farmer or vendor
+    if (!['farmer', 'vendor'].includes(req.user.role)) {
       return res.status(403).json({
         success: false,
         message: 'Only farmers and vendors can create products'
@@ -31,7 +38,7 @@ const createProduct = async (req, res) => {
       expiryDate
     } = req.body;
 
-    const product = new Product({
+    const productData = {
       sellerId: sellerId,
       name,
       description,
@@ -40,14 +47,22 @@ const createProduct = async (req, res) => {
       unit,
       availableQuantity,
       minimumOrderQuantity: minimumOrderQuantity || 1,
-      images: images || [],
-      location: location ? {
+      images: images || []
+    };
+
+    // Only add optional fields if they have values
+    if (harvestDate) productData.harvestDate = new Date(harvestDate);
+    if (expiryDate) productData.expiryDate = new Date(expiryDate);
+    
+    // Only add location if coordinates are provided
+    if (location && Array.isArray(location) && location.length === 2) {
+      productData.location = {
         type: 'Point',
         coordinates: location
-      } : undefined,
-      harvestDate: harvestDate ? new Date(harvestDate) : undefined,
-      expiryDate: expiryDate ? new Date(expiryDate) : undefined
-    });
+      };
+    }
+
+    const product = new Product(productData);
 
     await product.save();
 
@@ -60,7 +75,8 @@ const createProduct = async (req, res) => {
     logger.error('Create product failed:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to create product'
+      message: 'Failed to create product',
+      error: error.message
     });
   }
 };

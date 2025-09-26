@@ -48,10 +48,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
     setConnectionStatus('connecting');
     
-    const newSocket = io('http://localhost:5000', {
+    const newSocket = io('http://localhost:3000', {
       auth: {
         token: localStorage.getItem('authToken'),
-        userId: user?.id
+        userId: user?._id
       },
       transports: ['websocket', 'polling'],
       timeout: 10000,
@@ -208,3 +208,6 @@ export function useWebSocket() {
   }
   return context;
 }
+
+// Alias for compatibility
+export const useWebSocketContext = useWebSocket;

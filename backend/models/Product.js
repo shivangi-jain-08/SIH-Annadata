@@ -63,14 +63,13 @@ const productSchema = new mongoose.Schema({
   location: {
     type: {
       type: String,
-      enum: ['Point'],
-      default: 'Point'
+      enum: ['Point']
     },
     coordinates: {
       type: [Number], // [longitude, latitude]
       validate: {
         validator: function(coords) {
-          return coords.length === 2 && 
+          return coords && coords.length === 2 && 
                  coords[0] >= -180 && coords[0] <= 180 && // longitude
                  coords[1] >= -90 && coords[1] <= 90;     // latitude
         },

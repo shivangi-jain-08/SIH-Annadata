@@ -8,6 +8,7 @@ const CropRecommendation = require('./CropRecommendation');
 const DiseaseReport = require('./DiseaseReport');
 const Notification = require('./Notification');
 const VendorSimulation = require('./VendorSimulation');
+const VendorLocation = require('./VendorLocation');
 
 module.exports = {
   User,
@@ -18,5 +19,6 @@ module.exports = {
   CropRecommendation,
   DiseaseReport,
   Notification,
-  VendorSimulation
+  VendorSimulation,
+  VendorLocation
 };

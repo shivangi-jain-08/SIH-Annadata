@@ -16,6 +16,7 @@ interface AuthContextType extends AuthState {
   updateUser: (userData: Partial<User>) => void;
   refreshToken: () => Promise<void>;
   clearError: () => void;
+  mockLogin: (role: string) => Promise<void>;
 }
 
 // Token management utilities
@@ -395,6 +396,34 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setState(prev => ({ ...prev, error: null }));
   }, []);
 
+  const mockLogin = useCallback(async (role: string = 'vendor') => {
+    try {
+      setState(prev => ({ ...prev, loading: true, error: null }));
+      const response = await ApiClient.mockLogin(role);
+      
+      const { user, token } = response.data as any;
+      
+      // Store tokens and user data
+      TokenManager.setTokens(token);
+      TokenManager.setUser(user);
+      
+      setState({
+        user,
+        isAuthenticated: true,
+        loading: false,
+        error: null,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Mock login failed';
+      setState(prev => ({ 
+        ...prev, 
+        loading: false,
+        error: errorMessage,
+      }));
+      throw error;
+    }
+  }, []);
+
   const value: AuthContextType = {
     ...state,
     login,
@@ -403,6 +432,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     updateUser,
     refreshToken,
     clearError,
+    mockLogin,
   };
 
   return (

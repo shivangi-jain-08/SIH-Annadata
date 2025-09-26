@@ -162,6 +162,65 @@ router.get('/my-products',
   productController.getMyProducts
 );
 
+// Get products by seller role (for vendors to see farmer products)
+router.get('/by-role/:role', auth, async (req, res) => {
+  try {
+    const { role } = req.params;
+    const { page = 1, limit = 20 } = req.query;
+    
+    if (!['farmer', 'vendor'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid role. Must be farmer or vendor'
+      });
+    }
+    
+    // Find users with the specified role
+    const { User } = require('../models');
+    const sellers = await User.find({ role }).select('_id');
+    const sellerIds = sellers.map(seller => seller._id);
+    
+    const skip = (page - 1) * limit;
+    
+    const products = await Product.find({
+      sellerId: { $in: sellerIds },
+      isActive: true,
+      availableQuantity: { $gt: 0 }
+    })
+      .populate('sellerId', 'name phone location role')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+    
+    const total = await Product.countDocuments({
+      sellerId: { $in: sellerIds },
+      isActive: true,
+      availableQuantity: { $gt: 0 }
+    });
+    
+    res.json({
+      success: true,
+      message: `Products from ${role}s retrieved successfully`,
+      data: {
+        products,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get products by role error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch products by role',
+      error: error.message
+    });
+  }
+});
+
 // Create new product
 router.post('/',
   auth,

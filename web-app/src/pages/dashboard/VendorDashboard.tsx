@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -31,9 +32,12 @@ import {
 } from '@/hooks/useVendorConsumerSales';
 import { componentStyles, getCardStyles, getRoleColor, getStatusColor } from '@/utils/styles';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWebSocket } from '@/contexts/WebSocketContext';
+
 
 export function VendorDashboard() {
-  const { user } = useAuth();
+  const { user, mockLogin, isAuthenticated } = useAuth();
+  const { socket, isConnected } = useWebSocket();
   const { 
     products: myProducts, 
     stats: productStats, 
@@ -46,7 +50,7 @@ export function VendorDashboard() {
     loading: farmerProductsLoading,
     error: farmerProductsError,
     refetch: refetchFarmerProducts 
-  } = useProducts(); // Get products from farmers
+  } = useProducts({ role: 'farmer' }); // Get products from farmers only
   const { 
     orders, 
     orderStats, 
@@ -137,7 +141,33 @@ export function VendorDashboard() {
     }
   };
 
+
+
   const quickActions = [
+    {
+      title: 'Manage Products',
+      description: 'Add, edit, and manage your product inventory',
+      icon: Package,
+      href: '/dashboard/vendor/products',
+      color: 'bg-purple-500',
+      badge: productStats.total > 0 ? `${productStats.total} products` : null,
+    },
+    {
+      title: 'Live Location Dashboard',
+      description: 'Real-time location sharing and delivery management',
+      icon: Navigation,
+      href: '/dashboard/vendor/live-location',
+      color: 'bg-red-500',
+      badge: vendorStatus.isOnline ? 'Online' : 'Offline',
+    },
+    {
+      title: 'Location & Availability',
+      description: 'Control your online status and location sharing',
+      icon: MapPin,
+      href: '/dashboard/vendor/location',
+      color: 'bg-orange-500',
+      badge: vendorStatus.isOnline ? 'Online' : 'Offline',
+    },
     {
       title: 'Buy from Farmers',
       description: 'Browse fresh produce from local farmers',
@@ -153,22 +183,6 @@ export function VendorDashboard() {
       href: '/dashboard/vendor/consumer-orders',
       color: 'bg-blue-500',
       badge: (consumerSalesStats as any)?.pendingOrders > 0 ? `${(consumerSalesStats as any)?.pendingOrders} pending` : null,
-    },
-    {
-      title: 'Manage Inventory',
-      description: 'Update stock and product listings',
-      icon: Package,
-      href: '/dashboard/vendor/inventory',
-      color: 'bg-purple-500',
-      badge: productStats.total > 0 ? `${productStats.total}` : null,
-    },
-    {
-      title: 'Location Services',
-      description: 'Update location and find nearby customers',
-      icon: MapPin,
-      href: '/dashboard/vendor/location',
-      color: 'bg-orange-500',
-      badge: vendorStatus.isOnline ? 'Online' : 'Offline',
     },
   ];
 
@@ -198,6 +212,42 @@ export function VendorDashboard() {
       time: '6 hours ago',
     },
   ];
+
+
+
+  // Mock login for testing
+  if (!isAuthenticated || !user) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Authentication Required</CardTitle>
+            <CardDescription>
+              Please log in to access the vendor dashboard
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                For testing purposes, you can use mock login:
+              </p>
+              <div className="flex space-x-2">
+                <Button onClick={() => mockLogin('vendor')}>
+                  Login as Vendor
+                </Button>
+                <Button variant="outline" onClick={() => mockLogin('farmer')}>
+                  Login as Farmer
+                </Button>
+                <Button variant="outline" onClick={() => mockLogin('consumer')}>
+                  Login as Consumer
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -274,11 +324,12 @@ export function VendorDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {quickActions.map((action, index) => (
-                  <div
+                  <Link
                     key={index}
-                    className={`${componentStyles.dashboard.quickAction} relative`}
+                    to={action.href}
+                    className={`${componentStyles.dashboard.quickAction} relative cursor-pointer block`}
                   >
                     <div className="flex items-start space-x-3">
                       <div className={`p-2 rounded-lg ${action.color} text-white group-hover:scale-110 transition-transform`}>
@@ -298,7 +349,7 @@ export function VendorDashboard() {
                         </p>
                       </div>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </CardContent>
@@ -561,15 +612,19 @@ export function VendorDashboard() {
                         )}
                       </div>
                     </div>
-                    <Button size="sm" variant="outline">
-                      Order Now
-                    </Button>
+                    <Link to="/dashboard/vendor/buy">
+                      <Button size="sm" variant="outline">
+                        Order Now
+                      </Button>
+                    </Link>
                   </div>
                 </div>
               ))}
-              <Button size="sm" variant="outline" className="w-full">
-                Browse All Products ({farmerProducts.length})
-              </Button>
+              <Link to="/dashboard/vendor/buy">
+                <Button size="sm" variant="outline" className="w-full">
+                  Browse All Products ({farmerProducts.length})
+                </Button>
+              </Link>
             </div>
           ) : (
             <div className="text-center py-6">

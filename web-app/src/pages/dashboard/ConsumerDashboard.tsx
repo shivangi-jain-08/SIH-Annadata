@@ -28,6 +28,10 @@ import {
   useProximityNotifications 
 } from '@/hooks/useMarketplace';
 import { componentStyles, getCardStyles } from '@/utils/styles';
+import { ProximityNotificationHandler } from '@/components/notifications/ProximityNotificationHandler';
+import { LocationBasedMarketplace } from '@/components/marketplace/LocationBasedMarketplace';
+// import { ProximityOrderManager } from '@/components/orders/ProximityOrderManager';
+import { useConsumerRealTime } from '@/hooks/useRealTime';
 
 interface ProximityNotification {
   id: string;
@@ -48,6 +52,7 @@ interface ProximityNotification {
 export function ConsumerDashboard() {
   const { user } = useAuth();
   const { location, requestLocation, locationError } = useLocation();
+  const [activeView, setActiveView] = useState<'dashboard' | 'marketplace' | 'notifications'>('dashboard');
   const { orders, loading: ordersLoading, refetch: refetchOrders } = useOrders();
   const { 
     vendors: nearbyVendors, 
@@ -63,6 +68,16 @@ export function ConsumerDashboard() {
     dismissNotification,
     clearAllNotifications 
   } = useProximityNotifications();
+  
+  // Real-time features
+  const {
+    proximityNotifications: realTimeNotifications,
+    orderUpdates,
+    nearbyVendors: realTimeNearbyVendors,
+    dismissProximityNotification,
+    updateConsumerLocation,
+    clearOrderUpdates
+  } = useConsumerRealTime();
 
   const [activeNotifications, setActiveNotifications] = useState<ProximityNotification[]>([]);
 
@@ -415,6 +430,13 @@ export function ConsumerDashboard() {
           </Card>
         </div>
       </div>
+
+      {/* Proximity Order Manager */}
+      {/* <ProximityOrderManager 
+        maxOrders={5}
+        autoAcceptRadius={1000}
+        showNotifications={true}
+      /> */}
 
       {/* Recent Orders */}
       <Card>

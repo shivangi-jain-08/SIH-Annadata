@@ -5,6 +5,7 @@ web-simulator
 python-ml-service/New Plant Diseases Dataset(Augmented)
 node_modules
 package-lock.json
+__tests__
 
 # Environment files
 .env

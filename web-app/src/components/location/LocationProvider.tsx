@@ -26,6 +26,8 @@ export function LocationProvider({ children }: LocationProviderProps) {
   const [error, setError] = useState<string | null>(null);
   const [isWatching, setIsWatching] = useState(false);
   const [watchId, setWatchId] = useState<number | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [lastErrorTime, setLastErrorTime] = useState(0);
   
   // const { updateLocation: wsUpdateLocation } = useWebSocket(); // Temporarily disabled
   const { user } = useAuth();
@@ -73,25 +75,50 @@ export function LocationProvider({ children }: LocationProviderProps) {
     throttledUpdate(newLocation);
   }, [throttledUpdate]);
 
+  // Define stopWatching first to avoid circular dependency
+  const stopWatching = useCallback(() => {
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+      setWatchId(null);
+      setIsWatching(false);
+    }
+  }, [watchId]);
+
   const handleLocationError = useCallback((error: GeolocationPositionError) => {
+    const now = Date.now();
+    
+    // Prevent error flooding - only log/update error once per 30 seconds
+    if (now - lastErrorTime < 30000) {
+      return;
+    }
+    
+    setLastErrorTime(now);
+    setRetryCount(prev => prev + 1);
+    
     let errorMessage = 'Location error occurred';
     
     switch (error.code) {
       case error.PERMISSION_DENIED:
         errorMessage = 'Location access denied. Please enable location services.';
         setPermission('denied');
+        stopWatching(); // Stop watching if permission denied
         break;
       case error.POSITION_UNAVAILABLE:
         errorMessage = 'Location information unavailable.';
         break;
       case error.TIMEOUT:
         errorMessage = 'Location request timed out.';
+        // Stop watching after 3 timeout attempts
+        if (retryCount >= 3) {
+          stopWatching();
+          errorMessage += ' Stopped trying after multiple timeouts.';
+        }
         break;
     }
     
     setError(errorMessage);
-    console.error('Geolocation error:', error);
-  }, []);
+    console.warn('Geolocation error (throttled):', error.code, errorMessage);
+  }, [lastErrorTime, retryCount, stopWatching]);
 
   const requestPermission = useCallback(async () => {
     if (!navigator.geolocation) {
@@ -133,13 +160,17 @@ export function LocationProvider({ children }: LocationProviderProps) {
       return;
     }
 
+    // Reset retry count when starting fresh
+    setRetryCount(0);
+    setLastErrorTime(0);
+
     const id = navigator.geolocation.watchPosition(
       handleLocationSuccess,
       handleLocationError,
       {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 60000 // 1 minute
+        enableHighAccuracy: false, // Use lower accuracy to reduce timeouts
+        timeout: 30000, // Longer timeout
+        maximumAge: 300000 // 5 minutes - use cached location longer
       }
     );
 
@@ -147,28 +178,17 @@ export function LocationProvider({ children }: LocationProviderProps) {
     setIsWatching(true);
   }, [isWatching, handleLocationSuccess, handleLocationError]);
 
-  const stopWatching = useCallback(() => {
-    if (watchId !== null) {
-      navigator.geolocation.clearWatch(watchId);
-      setWatchId(null);
-      setIsWatching(false);
-    }
-  }, [watchId]);
-
   const updateLocation = useCallback(async (newLocation: { latitude: number; longitude: number }) => {
     await throttledUpdate(newLocation);
   }, [throttledUpdate]);
 
-  // Auto-start location watching for vendors and consumers
+  // Don't auto-start location watching to prevent flooding
+  // Location will be requested manually by components that need it
   useEffect(() => {
-    if (user && (user.role === 'vendor' || user.role === 'consumer')) {
-      requestPermission();
-    }
-
     return () => {
       stopWatching();
     };
-  }, [user, requestPermission, stopWatching]);
+  }, [stopWatching]);
 
   const value: LocationContextType = {
     location,

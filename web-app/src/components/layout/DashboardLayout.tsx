@@ -21,6 +21,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { RealTimeConnectionManager } from '@/components/common/RealTimeConnectionManager';
 
 interface SidebarItem {
   icon: React.ReactNode;
@@ -271,6 +272,13 @@ export function DashboardLayout() {
           </div>
         </main>
       </div>
+
+      {/* Real-time Connection Manager */}
+      <RealTimeConnectionManager 
+        position="bottom-right"
+        showStats={true}
+        showReconnectButton={true}
+      />
     </div>
   );
 }

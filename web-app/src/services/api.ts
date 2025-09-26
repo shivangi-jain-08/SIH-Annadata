@@ -330,6 +330,10 @@ class ApiClient {
     return this.get<ApiResponse>('/auth/verify-token');
   }
 
+  async mockLogin(role: string = 'vendor'): Promise<AuthResponse> {
+    return this.post<AuthResponse>('/test-setup/mock-login', { role });
+  }
+
   // User methods
   async getProfile(): Promise<ApiResponse> {
     return this.get<ApiResponse>('/users/profile');
@@ -374,6 +378,10 @@ class ApiClient {
 
   async getMyProducts(): Promise<ProductsResponse> {
     return this.get<ProductsResponse>('/products/my-products');
+  }
+
+  async getProductsByRole(role: string): Promise<ProductsResponse> {
+    return this.get<ProductsResponse>(`/products/by-role/${role}`);
   }
 
   async getConsumerProducts(filters: {

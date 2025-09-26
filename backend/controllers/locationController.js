@@ -23,6 +23,29 @@ const updateLocation = async (req, res) => {
     }
 
     const userId = req.user ? req.user._id : '507f1f77bcf86cd799439011';
+    
+    // Update location using VendorLocation model
+    const { VendorLocation } = require('../models');
+    let vendorLocation = await VendorLocation.findOne({ vendorId: userId });
+    
+    if (!vendorLocation) {
+      // Create new vendor location if doesn't exist
+      vendorLocation = new VendorLocation({
+        vendorId: userId,
+        location: {
+          type: 'Point',
+          coordinates: [longitude, latitude]
+        },
+        isOnline: true
+      });
+    } else {
+      // Update existing location
+      await vendorLocation.updateLocation(longitude, latitude);
+    }
+    
+    await vendorLocation.save();
+    
+    // Also update location service for backward compatibility
     const result = await locationService.updateVendorLocation(
       userId,
       longitude,
@@ -32,7 +55,15 @@ const updateLocation = async (req, res) => {
     res.json({
       success: true,
       message: 'Location updated successfully',
-      data: result
+      data: {
+        ...result,
+        vendorLocation: {
+          isOnline: vendorLocation.isOnline,
+          deliveryRadius: vendorLocation.deliveryRadius,
+          acceptingOrders: vendorLocation.acceptingOrders,
+          lastLocationUpdate: vendorLocation.lastLocationUpdate
+        }
+      }
     });
   } catch (error) {
     logger.error('Update location failed:', error);

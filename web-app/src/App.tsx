@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { WebSocketProvider } from '@/contexts/WebSocketContext';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -16,8 +17,11 @@ import { ForgotPassword } from '@/pages/auth/ForgotPassword';
 
 // Dashboard pages
 import { FarmerRoutes } from '@/pages/dashboard/FarmerRoutes';
-import { VendorDashboard } from '@/pages/dashboard/VendorDashboard';
+import { VendorRoutes } from '@/pages/dashboard/VendorRoutes';
 import { ConsumerDashboard } from '@/pages/dashboard/ConsumerDashboard';
+
+// Demo pages
+import ConsumerMapDemo from '@/pages/ConsumerMapDemo';
 
 // Placeholder pages with proper styling
 const About = () => (
@@ -55,6 +59,7 @@ function App() {
           <LocationProvider>
             <Router>
               <NotificationManager />
+              <Toaster position="top-right" richColors />
               <Routes>
                 {/* Public routes with AppLayout */}
                 <Route path="/" element={<AppLayout />}>
@@ -62,6 +67,7 @@ function App() {
                   <Route path="about" element={<About />} />
                   <Route path="contact" element={<Contact />} />
                   <Route path="marketplace" element={<Marketplace />} />
+                  <Route path="vendor-nudge-demo" element={<ConsumerMapDemo />} />
                 </Route>
 
                 {/* Auth routes (no layout) */}
@@ -90,18 +96,10 @@ function App() {
 
                   {/* Vendor routes */}
                   <Route
-                    path="vendor"
-                    element={
-                      <ProtectedRoute requiredRole="vendor">
-                        <VendorDashboard />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
                     path="vendor/*"
                     element={
                       <ProtectedRoute requiredRole="vendor">
-                        <VendorDashboard />
+                        <VendorRoutes />
                       </ProtectedRoute>
                     }
                   />
@@ -125,7 +123,7 @@ function App() {
                   />
 
                   {/* Default dashboard redirect based on user role */}
-                  <Route index element={<Navigate to="/dashboard/farmer" replace />} />
+                  <Route index element={<Navigate to="/dashboard/vendor" replace />} />
                 </Route>
 
                 {/* Catch all route */}

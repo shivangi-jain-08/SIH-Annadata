@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,16 +17,38 @@ import {
   Settings,
   Bell,
   Eye,
-  EyeOff
+  EyeOff,
+  ArrowLeft
 } from 'lucide-react';
 import { useLocation } from '@/hooks/useLocation';
-import { useVendorStatus, useProximityNotifications } from '@/hooks/useVendorConsumerSales';
+import { useVendorLocationStatus, useProximityNotifications } from '@/hooks/useVendorConsumerSales';
 import { useNearbyVendors } from '@/hooks/useMarketplace';
 import { getCardStyles } from '@/utils/styles';
+import ApiClient from '@/services/api';
+import { useWebSocket } from '@/contexts/WebSocketContext';
+import { useVendorRealTime } from '@/hooks/useRealTime';
 
 export function LocationAvailabilityManager() {
-  const { location, requestLocation, locationError, updateLocation } = useLocation();
-  const { status: vendorStatus, goOnline, goOffline, toggleAcceptingOrders } = useVendorStatus();
+  const { location, requestLocation, locationError } = useLocation();
+  const { socket, isConnected } = useWebSocket();
+  const { 
+    vendorEvents, 
+    newOrders, 
+    updateVendorLocation: realTimeUpdateLocation,
+    goVendorOnline: realTimeGoOnline,
+    goVendorOffline: realTimeGoOffline,
+    clearNewOrders,
+    clearEvents
+  } = useVendorRealTime();
+  const { 
+    status: vendorStatus, 
+    loading: statusLoading,
+    error: statusError,
+    goOnline, 
+    goOffline, 
+    updateDeliverySettings,
+    updateLocation: updateVendorLocation
+  } = useVendorLocationStatus();
   const { sendProximityNotification, sending: sendingNotification } = useProximityNotifications();
   const { vendors: nearbyVendors } = useNearbyVendors(location);
 
@@ -33,44 +56,163 @@ export function LocationAvailabilityManager() {
   const [autoNotify, setAutoNotify] = useState(true);
   const [showNearbyVendors, setShowNearbyVendors] = useState(false);
 
-  // Update location when vendor goes online
+  // Update local state when vendor status changes
   useEffect(() => {
-    if (vendorStatus.isOnline && !location) {
-      requestLocation();
+    setDeliveryRadius(vendorStatus.deliveryRadius);
+  }, [vendorStatus.deliveryRadius]);
+
+  // Set up real-time location updates when vendor is online
+  useEffect(() => {
+    if (!vendorStatus.isOnline || !socket || !isConnected) return;
+
+    let watchId: number | null = null;
+
+    if (navigator.geolocation) {
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const newLocation = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          };
+
+          // Update backend
+          updateVendorLocation(newLocation).catch(console.error);
+
+          // Broadcast via Socket.io
+          socket.emit('vendor-location-update', {
+            longitude: newLocation.longitude,
+            latitude: newLocation.latitude,
+            isActive: vendorStatus.acceptingOrders
+          });
+        },
+        (error) => {
+          console.warn('Location watch error:', error);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 30000 // 30 seconds
+        }
+      );
     }
-  }, [vendorStatus.isOnline, location, requestLocation]);
+
+    return () => {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
+  }, [vendorStatus.isOnline, socket, isConnected, updateVendorLocation, vendorStatus.acceptingOrders]);
 
   const handleGoOnline = async () => {
-    if (!location) {
-      await requestLocation();
+    try {
+      let coords = vendorStatus.currentLocation;
+      
+      if (!coords) {
+        // Request location if not available
+        if (navigator.geolocation) {
+          coords = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(
+              (position) => resolve({
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude
+              }),
+              reject,
+              { enableHighAccuracy: true, timeout: 10000 }
+            );
+          });
+        }
+      }
+
+      await goOnline(coords);
+      
+      // Broadcast vendor online status via Socket.io
+      if (socket && isConnected && coords) {
+        socket.emit('vendor-online', {
+          longitude: coords.longitude,
+          latitude: coords.latitude
+        });
+      }
+    } catch (error) {
+      console.error('Failed to go online:', error);
+      alert('Failed to go online. Please check your location permissions and try again.');
     }
-    await goOnline();
   };
 
   const handleGoOffline = async () => {
-    await goOffline();
+    try {
+      await goOffline();
+      
+      // Broadcast vendor offline status via Socket.io
+      if (socket && isConnected) {
+        socket.emit('vendor-offline');
+      }
+    } catch (error) {
+      console.error('Failed to go offline:', error);
+      alert('Failed to go offline. Please try again.');
+    }
   };
 
   const handleSendProximityNotification = async () => {
-    if (!location) {
+    const currentLocation = vendorStatus.currentLocation || location;
+    
+    if (!currentLocation) {
       alert('Location is required to send proximity notifications');
       return;
     }
 
-    await sendProximityNotification({
-      latitude: location.latitude,
-      longitude: location.longitude,
-      message: 'Fresh products available for delivery!'
-    });
+    try {
+      await sendProximityNotification({
+        latitude: currentLocation.latitude,
+        longitude: currentLocation.longitude,
+        message: 'Fresh products available for delivery!'
+      });
+    } catch (error) {
+      // Error handling is done in the hook
+    }
   };
 
-  const handleUpdateDeliveryRadius = (newRadius: number) => {
+  const handleUpdateDeliveryRadius = async (newRadius: number) => {
     setDeliveryRadius(newRadius);
-    // In a real app, this would update the backend
+    
+    try {
+      await updateDeliverySettings({ deliveryRadius: newRadius });
+    } catch (error) {
+      console.error('Failed to update delivery radius:', error);
+      // Revert local state on error
+      setDeliveryRadius(vendorStatus.deliveryRadius);
+      alert('Failed to update delivery radius. Please try again.');
+    }
+  };
+
+  const handleToggleAcceptingOrders = async () => {
+    try {
+      await updateDeliverySettings({ 
+        acceptingOrders: !vendorStatus.acceptingOrders 
+      });
+    } catch (error) {
+      console.error('Failed to toggle accepting orders:', error);
+      alert('Failed to update order acceptance status. Please try again.');
+    }
   };
 
   return (
     <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center space-x-4">
+        <Link to="/dashboard/vendor">
+          <Button variant="outline">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Dashboard
+          </Button>
+        </Link>
+        <div>
+          <h2 className="text-2xl font-bold">Location & Availability</h2>
+          <p className="text-muted-foreground">
+            Control your online status and location sharing
+          </p>
+        </div>
+      </div>
+
       {/* Status Overview */}
       <Card>
         <CardHeader>
@@ -102,28 +244,34 @@ export function LocationAvailabilityManager() {
           {/* Location Status */}
           <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
             <div className="flex items-center space-x-3">
-              <div className={`p-2 rounded-full ${location ? 'bg-green-100' : 'bg-yellow-100'}`}>
-                <Navigation className={`h-4 w-4 ${location ? 'text-green-600' : 'text-yellow-600'}`} />
+              <div className={`p-2 rounded-full ${vendorStatus.currentLocation ? 'bg-green-100' : 'bg-yellow-100'}`}>
+                <Navigation className={`h-4 w-4 ${vendorStatus.currentLocation ? 'text-green-600' : 'text-yellow-600'}`} />
               </div>
               <div>
                 <p className="font-semibold text-sm">
-                  {location ? 'Location Active' : 'Location Not Set'}
+                  {vendorStatus.currentLocation ? 'Location Active' : 'Location Not Set'}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {location 
-                    ? `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`
+                  {vendorStatus.currentLocation 
+                    ? `${vendorStatus.currentLocation.latitude.toFixed(4)}, ${vendorStatus.currentLocation.longitude.toFixed(4)}`
                     : 'Enable location to start receiving orders'
                   }
                 </p>
+                {vendorStatus.onlineSince && (
+                  <p className="text-xs text-muted-foreground">
+                    Online since: {new Date(vendorStatus.onlineSince).toLocaleTimeString()}
+                  </p>
+                )}
               </div>
             </div>
             <Button 
               size="sm" 
               variant="outline"
-              onClick={() => location ? updateLocation(location) : requestLocation()}
+              onClick={requestLocation}
+              disabled={statusLoading}
             >
               <Navigation className="h-4 w-4 mr-2" />
-              {location ? 'Update' : 'Enable'} Location
+              Update Location
             </Button>
           </div>
 
@@ -149,15 +297,22 @@ export function LocationAvailabilityManager() {
                   size="sm" 
                   variant="outline"
                   onClick={handleGoOffline}
+                  disabled={statusLoading}
                 >
+                  {statusLoading ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : null}
                   Go Offline
                 </Button>
               ) : (
                 <Button 
                   size="sm"
                   onClick={handleGoOnline}
-                  disabled={!location}
+                  disabled={statusLoading}
                 >
+                  {statusLoading ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : null}
                   Go Online
                 </Button>
               )}
@@ -182,11 +337,27 @@ export function LocationAvailabilityManager() {
             </div>
             <Switch
               checked={vendorStatus.acceptingOrders}
-              onCheckedChange={toggleAcceptingOrders}
+              onCheckedChange={handleToggleAcceptingOrders}
+              disabled={statusLoading}
             />
           </div>
         </CardContent>
       </Card>
+
+      {/* Status Error */}
+      {statusError && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-2 text-red-800">
+              <AlertCircle className="h-5 w-5" />
+              <span className="font-medium">Status Error</span>
+            </div>
+            <p className="text-sm text-red-700 mt-1">
+              {statusError.message}
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Location Error */}
       {locationError && (
@@ -234,8 +405,10 @@ export function LocationAvailabilityManager() {
                 max="5000"
                 step="100"
                 value={deliveryRadius}
-                onChange={(e) => handleUpdateDeliveryRadius(parseInt(e.target.value))}
+                onChange={(e) => setDeliveryRadius(parseInt(e.target.value))}
+                onMouseUp={(e) => handleUpdateDeliveryRadius(parseInt((e.target as HTMLInputElement).value))}
                 className="flex-1"
+                disabled={statusLoading}
               />
               <div className="text-sm font-semibold min-w-[80px]">
                 {(deliveryRadius / 1000).toFixed(1)} km
@@ -271,7 +444,7 @@ export function LocationAvailabilityManager() {
             <Button 
               size="sm"
               onClick={handleSendProximityNotification}
-              disabled={!vendorStatus.isOnline || !location || sendingNotification}
+              disabled={!vendorStatus.isOnline || (!vendorStatus.currentLocation && !location) || sendingNotification}
             >
               {sendingNotification ? (
                 <RefreshCw className="h-4 w-4 mr-2 animate-spin" />

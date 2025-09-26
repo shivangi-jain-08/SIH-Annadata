@@ -24,8 +24,17 @@ const authenticate = async (req, res, next) => {
       });
     }
 
-    // For now, token is just the user ID
-    const user = await User.findById(token).select('-password');
+    let user;
+    
+    // Handle mock tokens for testing
+    if (token.startsWith('mock-token-')) {
+      const userId = token.split('-')[2];
+      user = await User.findById(userId).select('-password');
+    } else {
+      // For now, token is just the user ID
+      user = await User.findById(token).select('-password');
+    }
+    
     if (!user) {
       return res.status(401).json({
         success: false,

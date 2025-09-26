@@ -7,6 +7,7 @@ const marketplaceRoutes = require('./marketplace');
 const mlRoutes = require('./ml');
 const locationRoutes = require('./location');
 const notificationRoutes = require('./notifications');
+const analyticsRoutes = require('./analytics');
 const testingRoutes = require('./testing');
 const testUserRoutes = require('../create_test_user_endpoint');
 
@@ -25,6 +26,7 @@ router.use('/marketplace', marketplaceRoutes);
 router.use('/ml', mlRoutes);
 router.use('/location', locationRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/analytics', analyticsRoutes);
 router.use('/testing', testingRoutes);
 router.use('/test-setup', testUserRoutes);
 
@@ -97,7 +99,11 @@ router.get('/docs', (req, res) => {
         'DELETE /location/offline': 'Go offline (requires auth, vendor)',
         'GET /location/active-vendors': 'Get active vendor locations (requires auth)',
         'GET /location/stats': 'Get location statistics (requires auth)',
-        'GET /location/distance': 'Calculate distance between points (requires auth)'
+        'GET /location/distance': 'Calculate distance between points (requires auth)',
+        'GET /location/vendor-status': 'Get vendor online status and settings (requires auth, vendor)',
+        'PATCH /location/vendor-status': 'Update vendor online status and settings (requires auth, vendor)',
+        'GET /location/delivery-opportunities': 'Get delivery opportunities for vendor (requires auth, vendor)',
+        'POST /location/notify-proximity': 'Send proximity notifications to nearby consumers (requires auth, vendor)'
       },
       notifications: {
         'GET /notifications': 'Get current user notifications (requires auth)',
@@ -111,6 +117,11 @@ router.get('/docs', (req, res) => {
         'PATCH /notifications/:notificationId/read': 'Mark notification as read (requires auth)',
         'PATCH /notifications/mark-all-read': 'Mark all notifications as read (requires auth)',
         'POST /notifications/retry-failed': 'Retry failed notifications (requires auth)'
+      },
+      analytics: {
+        'GET /analytics/vendor-location': 'Get vendor location analytics (requires auth, vendor)',
+        'GET /analytics/vendor-dashboard': 'Get vendor dashboard statistics (requires auth, vendor)',
+        'GET /analytics/vendor-performance': 'Get vendor performance metrics (requires auth, vendor)'
       },
       health: {
         'GET /health': 'Health check endpoint'

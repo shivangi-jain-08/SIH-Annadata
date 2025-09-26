@@ -71,6 +71,12 @@ export function Header() {
               Marketplace
             </Link>
             <Link
+              to="/vendor-nudge-demo"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Vendor Demo
+            </Link>
+            <Link
               to="/about"
               className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
@@ -184,6 +190,13 @@ export function Header() {
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 Marketplace
+              </Link>
+              <Link
+                to="/vendor-nudge-demo"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Vendor Demo
               </Link>
               <Link
                 to="/about"

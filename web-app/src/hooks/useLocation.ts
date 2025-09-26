@@ -13,24 +13,47 @@ export function useLocation() {
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const newLocation = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        };
-        setLocation(newLocation);
-        setLocationError(null);
-      },
-      (error) => {
-        setLocationError(error.message);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 300000, // 5 minutes
-      }
-    );
+    // Try with high accuracy first, then fallback to lower accuracy
+    const tryGetLocation = (enableHighAccuracy: boolean, timeout: number) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const newLocation = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          };
+          setLocation(newLocation);
+          setLocationError(null);
+        },
+        (error) => {
+          if (enableHighAccuracy && error.code === 3) { // TIMEOUT
+            // Retry with lower accuracy and longer timeout
+            tryGetLocation(false, 30000);
+          } else {
+            let errorMessage = 'Unable to get location';
+            switch (error.code) {
+              case 1:
+                errorMessage = 'Location access denied. Please enable location services.';
+                break;
+              case 2:
+                errorMessage = 'Location unavailable. Please check your connection.';
+                break;
+              case 3:
+                errorMessage = 'Location request timed out. Please try again or set location manually.';
+                break;
+            }
+            setLocationError(errorMessage);
+          }
+        },
+        {
+          enableHighAccuracy,
+          timeout,
+          maximumAge: 300000, // 5 minutes
+        }
+      );
+    };
+
+    // Start with high accuracy and short timeout
+    tryGetLocation(true, 15000);
   }, []);
 
   const updateLocation = useCallback(async (newLocation: Location) => {
@@ -54,9 +77,8 @@ export function useLocation() {
     }
   }, []);
 
-  useEffect(() => {
-    getCurrentLocation();
-  }, [getCurrentLocation]);
+  // Don't automatically request location to prevent flooding
+  // Components should call requestLocation manually when needed
 
   return {
     location,

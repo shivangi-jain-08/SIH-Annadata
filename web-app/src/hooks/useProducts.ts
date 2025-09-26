@@ -3,8 +3,8 @@ import { useApi, useMutation } from './useApi';
 import ApiClient from '@/services/api';
 import { ProductFilters, ProductsResponse, ProductData, ApiResponse } from '@/types/api';
 
-export function useProducts(initialFilters: ProductFilters = {}) {
-  const [filters, setFilters] = useState<ProductFilters>(initialFilters);
+export function useProducts(initialFilters: ProductFilters & { role?: string } = {}) {
+  const [filters, setFilters] = useState<ProductFilters & { role?: string }>(initialFilters);
   
   const {
     data: productsResponse,
@@ -13,7 +13,12 @@ export function useProducts(initialFilters: ProductFilters = {}) {
     refetch,
     retry,
   } = useApi<ProductsResponse>(
-    () => ApiClient.getProducts(filters),
+    () => {
+      if (filters.role) {
+        return ApiClient.getProductsByRole(filters.role);
+      }
+      return ApiClient.getProducts(filters);
+    },
     [filters],
     {
       retryCount: 2,
@@ -103,8 +108,8 @@ export function useMyProducts() {
     () => ApiClient.getMyProducts(),
     [],
     {
-      immediate: false, // Don't load immediately to reduce initial API calls
-      retryCount: 1, // Reduced retries
+      immediate: true, // Load immediately
+      retryCount: 1,
       onError: (error) => {
         console.error('Failed to fetch my products:', error);
       }
@@ -117,12 +122,16 @@ export function useMyProducts() {
 
   const stats = useMemo(() => {
     const activeProducts = products.filter(p => (p as any).isActive !== false);
+    const outOfStockProducts = products.filter(p => p.availableQuantity === 0);
     const totalValue = products.reduce((sum, p) => sum + (p.price * p.availableQuantity), 0);
+    const categories = new Set(products.map(p => p.category)).size;
     
     return {
       total: products.length,
       active: activeProducts.length,
       inactive: products.length - activeProducts.length,
+      outOfStock: outOfStockProducts.length,
+      categories,
       totalValue,
       averagePrice: products.length > 0 ? totalValue / products.length : 0,
     };
