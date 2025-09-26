@@ -18,7 +18,7 @@ const heroSlides: HeroSlide[] = [
     title: "Smart Agriculture",
     subtitle: "AI-Powered Crop Advisory",
     description: "Get personalized crop recommendations based on soil analysis and weather data. Maximize your yield with data-driven insights.",
-    image: "/api/placeholder/600/400",
+    image: "https://www.staragri.com/wp-content/uploads/2025/07/Rise-of-AI-in-Agriculture.png",
     cta: "Start Farming Smart",
     ctaLink: "/register"
   },
@@ -26,7 +26,7 @@ const heroSlides: HeroSlide[] = [
     title: "Direct Marketplace",
     subtitle: "Connect Farmers to Consumers",
     description: "Skip the middleman. Farmers sell directly to vendors and consumers, ensuring fair prices and fresh produce.",
-    image: "/api/placeholder/600/400",
+    image: "https://kisansabha.in/Images/agricultural/Empowering%20Farmers%20Through%20Digital%20Agricultural%20Marketplaces.jpg",
     cta: "Join Marketplace",
     ctaLink: "/register"
   },
@@ -34,7 +34,7 @@ const heroSlides: HeroSlide[] = [
     title: "Disease Detection",
     subtitle: "AI-Powered Plant Health",
     description: "Upload plant images to instantly detect diseases and get treatment recommendations from our ML models.",
-    image: "/api/placeholder/600/400",
+    image: "https://media.licdn.com/dms/image/v2/D5612AQEpDAG6eND5WQ/article-cover_image-shrink_600_2000/article-cover_image-shrink_600_2000/0/1733230410040?e=2147483647&v=beta&t=OnXJFzdBC3oszBTt7yUrSQi_txIhx431RXqydYI477U",
     cta: "Try Disease Detection",
     ctaLink: "/register"
   }
@@ -82,7 +82,7 @@ export function Hero() {
                 {currentSlideData.description}
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                <Button asChild size="lg" className="animate-float">
+                <Button asChild size="lg" >
                   <Link to={currentSlideData.ctaLink}>
                     {currentSlideData.cta}
                   </Link>
@@ -148,11 +148,11 @@ export function Hero() {
       </div>
       
       {/* Scroll Down Indicator */}
-      <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 animate-bounce">
+      {/* <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 animate-bounce">
         <div className="w-6 h-10 border-2 border-primary rounded-full flex justify-center">
           <div className="w-1 h-3 bg-primary rounded-full mt-2 animate-pulse"></div>
         </div>
-      </div>
+      </div> */}
     </section>
   );
 }
