@@ -85,8 +85,8 @@ const vendorLocationSchema = new mongoose.Schema({
 // Create geospatial index for location-based queries
 vendorLocationSchema.index({ location: '2dsphere' });
 
-// Create indexes for frequently queried fields
-vendorLocationSchema.index({ vendorId: 1 });
+// // Create indexes for frequently queried fields
+// vendorLocationSchema.index({ vendorId: 1 });
 vendorLocationSchema.index({ isOnline: 1 });
 vendorLocationSchema.index({ isOnline: 1, acceptingOrders: 1 });
 vendorLocationSchema.index({ lastLocationUpdate: 1 });
