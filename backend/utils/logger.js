@@ -59,7 +59,8 @@ const logger = winston.createLogger({
 if (process.env.NODE_ENV !== 'production') {
   logger.add(new winston.transports.Console({
     format: consoleFormat,
-    level: process.env.CONSOLE_LOG_LEVEL || 'warn' // Only show warnings and errors in console
+    // level: process.env.CONSOLE_LOG_LEVEL || 'warn' // Only show warnings and errors in console
+    level: 'debug'
   }));
 }
 
