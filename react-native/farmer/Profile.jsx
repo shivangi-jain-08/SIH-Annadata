@@ -133,8 +133,18 @@ const Profile = () => {
   const getDisplayUserData = () => {
     if (!userData) return {};
     
+    // Debug logging for profile image
+    console.log('Profile Debug - Raw userData:', JSON.stringify({
+      profileUrl: userData.profileUrl,
+      profileImage: userData.profileImage,
+      avatar: userData.avatar
+    }, null, 2));
+    
+    const profileImageUrl = UserService.getProfileImageUrl(userData);
+    console.log('Profile Debug - Generated photo URL:', profileImageUrl);
+    
     return {
-      photo: userData.profileImage || UserService.getAvatarUrl(userData),
+      photo: profileImageUrl,
       fullName: userData.fullName,
       role: UserService.getUserRole(userData),
       email: userData.email,
@@ -208,6 +218,33 @@ Download: https://play.google.com/store/apps/annadata`,
       'Edit Profile',
       'Profile editing functionality coming soon!',
       [{ text: 'OK' }]
+    )
+  }
+
+  const handleUpdateProfileImage = () => {
+    Alert.alert(
+      'Update Profile Photo',
+      'Choose an option to update your profile photo:',
+      [
+        {
+          text: 'Test with Sample URL',
+          onPress: async () => {
+            try {
+              const sampleImageUrl = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face';
+              await UserService.updateProfileImage(sampleImageUrl);
+              await loadUserData(true); // Refresh data
+              Alert.alert('Success', 'Profile photo updated successfully!');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to update profile photo: ' + error.message);
+            }
+          }
+        },
+        {
+          text: 'Camera/Gallery (Coming Soon)',
+          onPress: () => Alert.alert('Info', 'Photo picker functionality will be available in the next update!')
+        },
+        { text: 'Cancel', style: 'cancel' }
+      ]
     )
   }
 
@@ -309,7 +346,7 @@ Download: https://play.google.com/store/apps/annadata`,
               source={{ uri: displayData.photo }}
               style={styles.profileImage}
             />
-            <TouchableOpacity style={styles.cameraButton}>
+            <TouchableOpacity style={styles.cameraButton} onPress={handleUpdateProfileImage}>
               <Icon name="Camera" size={16} color="white" />
             </TouchableOpacity>
           </View>
@@ -417,6 +454,7 @@ Download: https://play.google.com/store/apps/annadata`,
       <View style={styles.versionContainer}>
         <Text style={styles.versionText}>Annadata v1.0.0</Text>
         <Text style={styles.versionSubtext}>Built with ❤️ for farmers</Text>
+        <Text style={styles.versionSubtext}>netxspider</Text>
       </View>
     </ScrollView>
   )

@@ -110,6 +110,25 @@ class UserService {
         }
     }
 
+    // Update profile image URL specifically
+    static async updateProfileImage(profileUrl) {
+        try {
+            const currentUser = await this.getCurrentUser();
+            if (!currentUser) {
+                throw new Error('No user data found');
+            }
+
+            const updatedData = await this.updateUserProfile({ 
+                profileUrl: profileUrl 
+            });
+
+            return updatedData;
+        } catch (error) {
+            console.error('Error updating profile image:', error);
+            throw new Error('Failed to update profile image. Please try again.');
+        }
+    }
+
     // Clear user data (logout)
     static async clearUserData() {
         try {
@@ -197,6 +216,7 @@ class UserService {
             district: userData.district || locationInfo.district || 'Unknown District',
             pincode: userData.pincode || locationInfo.pincode || 'Unknown',
             profileImage: userData.profileImage || userData.avatar || null,
+            profileUrl: userData.profileUrl || null, // New profileUrl field for image URL
             createdAt: userData.createdAt,
             updatedAt: userData.updatedAt,
             isActive: userData.isActive,
@@ -238,7 +258,22 @@ class UserService {
         return 'U';
     }
 
-    // Generate avatar URL with initials
+    // Get profile image URL with fallback to generated avatar
+    static getProfileImageUrl(userData, size = 120) {
+        // Priority: profileUrl -> profileImage -> generated avatar
+        if (userData?.profileUrl) {
+            return userData.profileUrl;
+        }
+        
+        if (userData?.profileImage) {
+            return userData.profileImage;
+        }
+        
+        // Fallback to generated avatar
+        return this.getAvatarUrl(userData, size);
+    }
+
+    // Generate avatar URL with initials (fallback when no profile image)
     static getAvatarUrl(userData, size = 120) {
         const initials = this.getUserInitials(userData);
         const colors = ['4CAF50', '2196F3', 'FF9800', '9C27B0', 'F44336', '00BCD4'];
@@ -301,6 +336,7 @@ class UserService {
             coordinates: [75.8573, 30.8408], // Ludhiana coordinates
             address: 'Village Khairpur, Ludhiana, Punjab, India',
             profileImage: null,
+            profileUrl: null, // New profileUrl field for image URL
             createdAt: '2024-01-15T10:30:00Z',
             updatedAt: '2024-09-26T08:20:00Z'
         };
@@ -315,3 +351,5 @@ export const fetchUserProfile = UserService.fetchUserProfile.bind(UserService);
 export const formatUserData = UserService.formatUserData.bind(UserService);
 export const getUserRole = UserService.getUserRole.bind(UserService);
 export const getAvatarUrl = UserService.getAvatarUrl.bind(UserService);
+export const getProfileImageUrl = UserService.getProfileImageUrl.bind(UserService);
+export const updateProfileImage = UserService.updateProfileImage.bind(UserService);
