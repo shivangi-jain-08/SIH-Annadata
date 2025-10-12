@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { TouchableOpacity, Animated, StyleSheet, Dimensions, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from '../Icon';
 
 const { width, height } = Dimensions.get('window');
@@ -11,8 +12,33 @@ const FloatingChatBot = () => {
   const pulseAnimation = useRef(new Animated.Value(1)).current;
   const tooltipAnimation = useRef(new Animated.Value(0)).current;
   const [showTooltip, setShowTooltip] = useState(true);
+  const [userRole, setUserRole] = useState(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  // Check user role on component mount
+  useEffect(() => {
+    const checkUserRole = async () => {
+      try {
+        const userData = await AsyncStorage.getItem('userData');
+        if (userData) {
+          const user = JSON.parse(userData);
+          setUserRole(user.role);
+          // Only show for farmers
+          setIsVisible(user.role === 'farmer');
+        }
+      } catch (error) {
+        console.log('Error checking user role:', error);
+        setIsVisible(false);
+      }
+    };
+
+    checkUserRole();
+  }, []);
 
   useEffect(() => {
+    // Only run animations if visible (farmer role)
+    if (!isVisible) return;
+
     // Show tooltip animation
     const showTooltipAnimation = () => {
       Animated.timing(tooltipAnimation, {
@@ -61,7 +87,7 @@ const FloatingChatBot = () => {
       clearTimeout(hideTooltipTimer);
       clearTimeout(pulseTimer);
     };
-  }, []);
+  }, [isVisible]);
 
   const handlePress = () => {
     // Scale animation on press
@@ -81,6 +107,11 @@ const FloatingChatBot = () => {
     // Navigate to ChatBot
     navigation.navigate('ChatBot');
   };
+
+  // Don't render if user is not a farmer
+  if (!isVisible) {
+    return null;
+  }
 
   return (
     <View style={styles.wrapper}>
