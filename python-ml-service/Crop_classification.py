@@ -3,9 +3,10 @@ from torch import nn
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import os
 
 def crop_class(arr):
-    device = "cuda"
+    device = "cpu"
     class CropModel(nn.Module):
       def __init__(self,in_,hidden,out):
         super().__init__()
@@ -20,8 +21,8 @@ def crop_class(arr):
         return self.stackmf(x)
 
     Model = CropModel(in_=7,hidden=64,out=22).to(device)
-
-    Model.load_state_dict(torch.load(f="Crop_models\\Crop_Classification_modelv5.pth"))
+    path= os.path.join("Crop_models", "Crop_Classification_modelv5.pth")
+    Model.load_state_dict(torch.load(path,map_location=torch.device("cpu")))
 
     data = np.array(arr)
     data_tensor = torch.from_numpy(data).float().to(device)

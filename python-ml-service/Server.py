@@ -8,7 +8,7 @@ from Hardware_dummy import fcv
 import threading
 import certifi
 import google.generativeai as genai
-
+import os
 
 genai.configure(api_key="AIzaSyC4YksUB1RhziccEL7RdbOUkk6y9s0zHSA") # type: ignore
 
@@ -109,5 +109,5 @@ def receive_data():
 if __name__ == '__main__':
     t = threading.Thread(target=buffer, daemon=True)
     t.start()
-    app.run(debug=False)
-
+    port = int(os.environ.get("PORT", 5000))  # Render provides PORT
+    app.run(host="0.0.0.0", port=port, debug=True)
