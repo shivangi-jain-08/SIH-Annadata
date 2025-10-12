@@ -444,25 +444,6 @@ const Login = () => {
                     )}
                 </TouchableOpacity>
             </View>
-            <View style={{ 
-                borderTopWidth: 1, 
-                borderColor: '#E0E0E0', 
-                marginTop: 30, 
-                marginHorizontal: 20 
-            }}>
-                <Text style={{ 
-                    textAlign: 'center', 
-                    paddingTop: 16,
-                    fontSize: 14,
-                    color: '#666',
-                    backgroundColor: 'white',
-                    alignSelf: 'center',
-                    paddingHorizontal: 16,
-                    marginTop: -8,
-                }}>
-                    Or Continue With
-                </Text>
-            </View>
 
             <View style={{ marginTop: 20, alignSelf: 'center' }}>
                 <Text style={{ textAlign: 'center', fontSize: 14 }}>

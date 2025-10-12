@@ -4,7 +4,7 @@
 const __DEV__ = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
 
 // Your local machine IP address (replace with your actual IP)
-const LOCAL_IP = '10.224.219.103';
+const LOCAL_IP = '10.153.127.239';
 
 // API Configuration
 const API_CONFIG = {
