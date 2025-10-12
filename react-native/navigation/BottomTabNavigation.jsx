@@ -13,6 +13,7 @@ import CBuy from '../consumer/CBuy';
 import COrders from '../consumer/COrders';
 import CProfile from '../consumer/CProfile';
 import ScreenWrapper from '../components/ScreenWrapper';
+import Icon from '../Icon';
 
 const Tab = createBottomTabNavigator();
 
@@ -38,33 +39,169 @@ function BottomTabNavigation() {
 
   if (role === 'Farmer') {
   return (
-    <Tab.Navigator screenOptions={{ headerShown: false }}>
-      <Tab.Screen name="Dashboard" component={WrappedDashboard} />
-      <Tab.Screen name="Crops" component={WrappedCrops} />
-      <Tab.Screen name="Orders" component={WrappedOrders} />
-      <Tab.Screen name="Profile" component={WrappedProfile} />
+    <Tab.Navigator 
+      screenOptions={{ 
+        headerShown: false,
+        tabBarActiveTintColor: '#4CAF50',
+        tabBarInactiveTintColor: '#666',
+        tabBarStyle: {
+          backgroundColor: 'white',
+          borderTopWidth: 1,
+          borderTopColor: '#E0E0E0',
+          paddingBottom: 5,
+          paddingTop: 5,
+          height: 60,
+        },
+      }}
+    >
+      <Tab.Screen 
+        name="Dashboard" 
+        component={WrappedDashboard}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="LayoutDashboard" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name="Crops" 
+        component={WrappedCrops}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="Wheat" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name="Orders" 
+        component={WrappedOrders}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="ShoppingBag" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name="Profile" 
+        component={WrappedProfile}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="User" color={color} size={size} />
+          ),
+        }}
+      />
       </Tab.Navigator>
   );
 }
 else if (role === 'Vendor') {
   return (
-    <Tab.Navigator screenOptions={{ headerShown: false }}>
-      <Tab.Screen name="Dashboard" component={WrappedVDashboard} />
-      <Tab.Screen name="Buy Crops" component={WrappedVBuyCrops} />
-      <Tab.Screen name="Sell Crops" component={WrappedVSellCrops} />
-      <Tab.Screen name="Profile" component={WrappedVProfile} />
+    <Tab.Navigator 
+      screenOptions={{ 
+        headerShown: false,
+        tabBarActiveTintColor: '#FF9800',
+        tabBarInactiveTintColor: '#666',
+        tabBarStyle: {
+          backgroundColor: 'white',
+          borderTopWidth: 1,
+          borderTopColor: '#E0E0E0',
+          paddingBottom: 5,
+          paddingTop: 5,
+          height: 60,
+        },
+      }}
+    >
+      <Tab.Screen 
+        name="Dashboard" 
+        component={WrappedVDashboard}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="LayoutDashboard" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name="Buy Crops" 
+        component={WrappedVBuyCrops}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="ShoppingCart" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name="Sell Crops" 
+        component={WrappedVSellCrops}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="Store" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name="Profile" 
+        component={WrappedVProfile}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="User" color={color} size={size} />
+          ),
+        }}
+      />
     </Tab.Navigator>
   );
-} else {
+ } else {
   return (
-    <Tab.Navigator screenOptions={{ headerShown: false }}>
-      <Tab.Screen name="Dashboard" component={WrappedCDashboard} />
-      <Tab.Screen name="Buy" component={WrappedCBuy} />
-      <Tab.Screen name="Orders" component={WrappedCOrders} />
-      <Tab.Screen name="Profile" component={WrappedCProfile} />
+    <Tab.Navigator 
+      screenOptions={{ 
+        headerShown: false,
+        tabBarActiveTintColor: '#2196F3',
+        tabBarInactiveTintColor: '#666',
+        tabBarStyle: {
+          backgroundColor: 'white',
+          borderTopWidth: 1,
+          borderTopColor: '#E0E0E0',
+          paddingBottom: 5,
+          paddingTop: 5,
+          height: 60,
+        },
+      }}
+    >
+      <Tab.Screen 
+        name="Dashboard" 
+        component={WrappedCDashboard}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="LayoutDashboard" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name="Buy" 
+        component={WrappedCBuy}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="ShoppingCart" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name="Orders" 
+        component={WrappedCOrders}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="Package" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name="Profile" 
+        component={WrappedCProfile}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="User" color={color} size={size} />
+          ),
+        }}
+      />
     </Tab.Navigator>
   );
-}
-
-}
+}}
 export default BottomTabNavigation;
