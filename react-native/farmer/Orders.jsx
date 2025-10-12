@@ -8,7 +8,10 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  RefreshControl
+  RefreshControl,
+  Modal,
+  TextInput,
+  Alert
 } from 'react-native'
 import Svg, { Polyline, Circle } from 'react-native-svg'
 import Icon from '../Icon'
@@ -160,6 +163,92 @@ const OrderAnalyticsCard = ({ title, value, icon, color, subtitle }) => {
   )
 }
 
+const CropListingCard = ({ listing, onEdit, onDelete }) => {
+  const getQualityColor = (quality) => {
+    switch (quality.toLowerCase()) {
+      case 'premium': return '#4CAF50';
+      case 'standard': return '#FF9800';
+      case 'organic': return '#8BC34A';
+      default: return '#666';
+    }
+  };
+
+  const getCropIcon = (cropName) => {
+    const name = cropName?.toLowerCase() || '';
+    if (name.includes('wheat') || name.includes('flour')) return 'Wheat';
+    if (name.includes('rice') || name.includes('basmati')) return 'Leaf';
+    if (name.includes('tomato')) return 'Apple';
+    if (name.includes('spinach') || name.includes('vegetable')) return 'Leaf';
+    if (name.includes('apple') || name.includes('fruit')) return 'Apple';
+    return 'Package';
+  };
+
+  return (
+    <View style={styles.cropListingCard}>
+      <View style={styles.cropListingHeader}>
+        <View style={styles.cropListingInfo}>
+          <View style={styles.cropListingTitleRow}>
+            <Icon name={getCropIcon(listing.cropName)} size={20} color="#4CAF50" />
+            <Text style={styles.cropListingName}>{listing.cropName}</Text>
+            <View style={[styles.qualityBadge, { backgroundColor: getQualityColor(listing.quality) + '20' }]}>
+              <Text style={[styles.qualityText, { color: getQualityColor(listing.quality) }]}>
+                {listing.quality}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.cropListingDescription}>{listing.description}</Text>
+        </View>
+      </View>
+      
+      <View style={styles.cropListingDetails}>
+        <View style={styles.cropListingDetailRow}>
+          <View style={styles.cropListingDetailItem}>
+            <Icon name="Package" size={16} color="#666" />
+            <Text style={styles.cropListingDetailText}>{listing.quantity} kg</Text>
+          </View>
+          <View style={styles.cropListingDetailItem}>
+            <Icon name="DollarSign" size={16} color="#666" />
+            <Text style={styles.cropListingDetailText}>₹{listing.pricePerKg}/kg</Text>
+          </View>
+        </View>
+        
+        <View style={styles.cropListingDetailRow}>
+          <View style={styles.cropListingDetailItem}>
+            <Icon name="MapPin" size={16} color="#666" />
+            <Text style={styles.cropListingDetailText}>{listing.location}</Text>
+          </View>
+          <View style={styles.cropListingDetailItem}>
+            <Icon name="Calendar" size={16} color="#666" />
+            <Text style={styles.cropListingDetailText}>{listing.harvestDate}</Text>
+          </View>
+        </View>
+      </View>
+      
+      <View style={styles.cropListingActions}>
+        <Text style={styles.cropListingTotal}>
+          Total: ₹{(listing.quantity * listing.pricePerKg).toLocaleString()}
+        </Text>
+        <View style={styles.cropListingButtons}>
+          <TouchableOpacity 
+            style={[styles.cropListingButton, styles.editButton]} 
+            onPress={() => onEdit(listing)}
+          >
+            <Icon name="Edit" size={16} color="#2196F3" />
+            <Text style={styles.editButtonText}>Edit</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.cropListingButton, styles.deleteButton]} 
+            onPress={() => onDelete(listing)}
+          >
+            <Icon name="Trash2" size={16} color="#F44336" />
+            <Text style={styles.deleteButtonText}>Delete</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+};
+
 const PendingOrderCard = ({ order }) => {
   const getStatusColor = (status) => {
     return OrdersService.getStatusColor(status);
@@ -222,6 +311,21 @@ const Orders = () => {
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [metrics, setMetrics] = useState({});
+  
+  // Crop Listings State
+  const [cropListings, setCropListings] = useState([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingListing, setEditingListing] = useState(null);
+  const [newListing, setNewListing] = useState({
+    cropName: '',
+    quantity: '',
+    pricePerKg: '',
+    description: '',
+    location: '',
+    harvestDate: '',
+    quality: 'Premium'
+  });
 
   // Load orders data from database
   const loadOrdersData = async () => {
@@ -252,16 +356,178 @@ const Orders = () => {
     }
   };
 
+  // Load crop listings data
+  const loadCropListings = async () => {
+    try {
+      // TODO: Replace with actual API call to get farmer's crop listings
+      // const response = await CropService.getFarmerListings();
+      
+      // Mock data for now
+      const mockListings = [
+        {
+          id: '1',
+          cropName: 'Wheat',
+          quantity: 1000,
+          pricePerKg: 25,
+          description: 'Fresh wheat from organic farm, excellent quality grain',
+          location: 'Punjab, India',
+          harvestDate: '2025-10-01',
+          quality: 'Premium'
+        },
+        {
+          id: '2',
+          cropName: 'Basmati Rice',
+          quantity: 500,
+          pricePerKg: 45,
+          description: 'Premium basmati rice with long grains and aromatic fragrance',
+          location: 'Punjab, India',
+          harvestDate: '2025-09-15',
+          quality: 'Premium'
+        },
+        {
+          id: '3',
+          cropName: 'Tomatoes',
+          quantity: 200,
+          pricePerKg: 35,
+          description: 'Fresh red tomatoes, perfect for cooking and salads',
+          location: 'Punjab, India',
+          harvestDate: '2025-10-05',
+          quality: 'Standard'
+        }
+      ];
+      
+      setCropListings(mockListings);
+    } catch (err) {
+      console.error('Error loading crop listings:', err);
+      setCropListings([]);
+    }
+  };
+
+  // Add new crop listing
+  const handleAddListing = async () => {
+    try {
+      if (!newListing.cropName || !newListing.quantity || !newListing.pricePerKg) {
+        Alert.alert('Error', 'Please fill in all required fields');
+        return;
+      }
+
+      // TODO: Replace with actual API call
+      // const response = await CropService.addListing(newListing);
+      
+      const listing = {
+        id: Date.now().toString(),
+        ...newListing,
+        quantity: parseFloat(newListing.quantity),
+        pricePerKg: parseFloat(newListing.pricePerKg)
+      };
+
+      setCropListings(prev => [listing, ...prev]);
+      
+      // Reset form
+      setNewListing({
+        cropName: '',
+        quantity: '',
+        pricePerKg: '',
+        description: '',
+        location: '',
+        harvestDate: '',
+        quality: 'Premium'
+      });
+      
+      setShowAddModal(false);
+      Alert.alert('Success', 'Crop listing added successfully!');
+    } catch (err) {
+      console.error('Error adding listing:', err);
+      Alert.alert('Error', 'Failed to add crop listing');
+    }
+  };
+
+  // Edit crop listing
+  const handleEditListing = (listing) => {
+    setEditingListing(listing);
+    setNewListing({
+      cropName: listing.cropName,
+      quantity: listing.quantity.toString(),
+      pricePerKg: listing.pricePerKg.toString(),
+      description: listing.description,
+      location: listing.location,
+      harvestDate: listing.harvestDate,
+      quality: listing.quality
+    });
+    setShowEditModal(true);
+  };
+
+  // Update crop listing
+  const handleUpdateListing = async () => {
+    try {
+      if (!newListing.cropName || !newListing.quantity || !newListing.pricePerKg) {
+        Alert.alert('Error', 'Please fill in all required fields');
+        return;
+      }
+
+      // TODO: Replace with actual API call
+      // const response = await CropService.updateListing(editingListing.id, newListing);
+      
+      const updatedListing = {
+        ...editingListing,
+        ...newListing,
+        quantity: parseFloat(newListing.quantity),
+        pricePerKg: parseFloat(newListing.pricePerKg)
+      };
+
+      setCropListings(prev => 
+        prev.map(listing => 
+          listing.id === editingListing.id ? updatedListing : listing
+        )
+      );
+      
+      setShowEditModal(false);
+      setEditingListing(null);
+      Alert.alert('Success', 'Crop listing updated successfully!');
+    } catch (err) {
+      console.error('Error updating listing:', err);
+      Alert.alert('Error', 'Failed to update crop listing');
+    }
+  };
+
+  // Delete crop listing
+  const handleDeleteListing = (listing) => {
+    Alert.alert(
+      'Delete Listing',
+      `Are you sure you want to delete the listing for ${listing.cropName}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // TODO: Replace with actual API call
+              // await CropService.deleteListing(listing.id);
+              
+              setCropListings(prev => prev.filter(item => item.id !== listing.id));
+              Alert.alert('Success', 'Crop listing deleted successfully!');
+            } catch (err) {
+              console.error('Error deleting listing:', err);
+              Alert.alert('Error', 'Failed to delete crop listing');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   // Handle refresh
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadOrdersData();
+    await Promise.all([loadOrdersData(), loadCropListings()]);
     setRefreshing(false);
   };
 
   // Load data on component mount
   useEffect(() => {
     loadOrdersData();
+    loadCropListings();
   }, []);
 
   // Generate dynamic crop earnings from orders
@@ -512,6 +778,50 @@ const Orders = () => {
         </View>
       </View>
 
+      {/* Crop Listings Management */}
+      <View style={styles.cropListingsSection}>
+        <View style={styles.cropListingsHeader}>
+          <Text style={styles.sectionTitle}>My Crop Listings</Text>
+          <TouchableOpacity 
+            style={styles.addListingButton} 
+            onPress={() => setShowAddModal(true)}
+          >
+            <Icon name="Plus" size={16} color="white" />
+            <Text style={styles.addListingText}>Add Listing</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.sectionSubtitle}>Manage your crop listings for vendors ({cropListings.length} active)</Text>
+        
+        {cropListings.length > 0 ? (
+          <FlatList
+            data={cropListings}
+            renderItem={({ item }) => (
+              <CropListingCard 
+                listing={item} 
+                onEdit={handleEditListing}
+                onDelete={handleDeleteListing}
+              />
+            )}
+            keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.cropListingsList}
+            nestedScrollEnabled={true}
+          />
+        ) : (
+          <View style={styles.noCropListingsContainer}>
+            <Icon name="Package" size={48} color="#ccc" />
+            <Text style={styles.noCropListingsText}>No crop listings yet</Text>
+            <Text style={styles.noCropListingsSubtext}>Create your first listing to start selling your crops to vendors</Text>
+            <TouchableOpacity 
+              style={styles.addFirstListingButton} 
+              onPress={() => setShowAddModal(true)}
+            >
+              <Text style={styles.addFirstListingText}>Add Your First Listing</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
       {/* All Orders List */}
       <View style={styles.pendingOrdersSection}>
         <View style={styles.pendingOrdersHeader}>
@@ -543,6 +853,260 @@ const Orders = () => {
           </View>
         )}
       </View>
+
+      {/* Add Listing Modal */}
+      <Modal
+        visible={showAddModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowAddModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add New Crop Listing</Text>
+              <TouchableOpacity onPress={() => setShowAddModal(false)}>
+                <Icon name="X" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.modalContent}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Crop Name *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={newListing.cropName}
+                  onChangeText={(text) => setNewListing(prev => ({ ...prev, cropName: text }))}
+                  placeholder="e.g., Wheat, Rice, Tomatoes"
+                />
+              </View>
+              
+              <View style={styles.inputRow}>
+                <View style={[styles.inputGroup, { flex: 1, marginRight: 10 }]}>
+                  <Text style={styles.inputLabel}>Quantity (kg) *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={newListing.quantity}
+                    onChangeText={(text) => setNewListing(prev => ({ ...prev, quantity: text }))}
+                    placeholder="1000"
+                    keyboardType="numeric"
+                  />
+                </View>
+                
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                  <Text style={styles.inputLabel}>Price per kg (₹) *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={newListing.pricePerKg}
+                    onChangeText={(text) => setNewListing(prev => ({ ...prev, pricePerKg: text }))}
+                    placeholder="25"
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+              
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Description</Text>
+                <TextInput
+                  style={[styles.textInput, styles.textArea]}
+                  value={newListing.description}
+                  onChangeText={(text) => setNewListing(prev => ({ ...prev, description: text }))}
+                  placeholder="Describe your crop quality, farming practices..."
+                  multiline={true}
+                  numberOfLines={3}
+                />
+              </View>
+              
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Location</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={newListing.location}
+                  onChangeText={(text) => setNewListing(prev => ({ ...prev, location: text }))}
+                  placeholder="Village, District, State"
+                />
+              </View>
+              
+              <View style={styles.inputRow}>
+                <View style={[styles.inputGroup, { flex: 1, marginRight: 10 }]}>
+                  <Text style={styles.inputLabel}>Harvest Date</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={newListing.harvestDate}
+                    onChangeText={(text) => setNewListing(prev => ({ ...prev, harvestDate: text }))}
+                    placeholder="YYYY-MM-DD"
+                  />
+                </View>
+                
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                  <Text style={styles.inputLabel}>Quality</Text>
+                  <View style={styles.qualitySelector}>
+                    {['Premium', 'Standard', 'Organic'].map((quality) => (
+                      <TouchableOpacity
+                        key={quality}
+                        style={[
+                          styles.qualityOption,
+                          newListing.quality === quality && styles.qualityOptionSelected
+                        ]}
+                        onPress={() => setNewListing(prev => ({ ...prev, quality }))}
+                      >
+                        <Text style={[
+                          styles.qualityOptionText,
+                          newListing.quality === quality && styles.qualityOptionTextSelected
+                        ]}>
+                          {quality}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            </ScrollView>
+            
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={styles.cancelButton} 
+                onPress={() => setShowAddModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.saveButton} 
+                onPress={handleAddListing}
+              >
+                <Text style={styles.saveButtonText}>Add Listing</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit Listing Modal */}
+      <Modal
+        visible={showEditModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Crop Listing</Text>
+              <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                <Icon name="X" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.modalContent}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Crop Name *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={newListing.cropName}
+                  onChangeText={(text) => setNewListing(prev => ({ ...prev, cropName: text }))}
+                  placeholder="e.g., Wheat, Rice, Tomatoes"
+                />
+              </View>
+              
+              <View style={styles.inputRow}>
+                <View style={[styles.inputGroup, { flex: 1, marginRight: 10 }]}>
+                  <Text style={styles.inputLabel}>Quantity (kg) *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={newListing.quantity}
+                    onChangeText={(text) => setNewListing(prev => ({ ...prev, quantity: text }))}
+                    placeholder="1000"
+                    keyboardType="numeric"
+                  />
+                </View>
+                
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                  <Text style={styles.inputLabel}>Price per kg (₹) *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={newListing.pricePerKg}
+                    onChangeText={(text) => setNewListing(prev => ({ ...prev, pricePerKg: text }))}
+                    placeholder="25"
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+              
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Description</Text>
+                <TextInput
+                  style={[styles.textInput, styles.textArea]}
+                  value={newListing.description}
+                  onChangeText={(text) => setNewListing(prev => ({ ...prev, description: text }))}
+                  placeholder="Describe your crop quality, farming practices..."
+                  multiline={true}
+                  numberOfLines={3}
+                />
+              </View>
+              
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Location</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={newListing.location}
+                  onChangeText={(text) => setNewListing(prev => ({ ...prev, location: text }))}
+                  placeholder="Village, District, State"
+                />
+              </View>
+              
+              <View style={styles.inputRow}>
+                <View style={[styles.inputGroup, { flex: 1, marginRight: 10 }]}>
+                  <Text style={styles.inputLabel}>Harvest Date</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={newListing.harvestDate}
+                    onChangeText={(text) => setNewListing(prev => ({ ...prev, harvestDate: text }))}
+                    placeholder="YYYY-MM-DD"
+                  />
+                </View>
+                
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                  <Text style={styles.inputLabel}>Quality</Text>
+                  <View style={styles.qualitySelector}>
+                    {['Premium', 'Standard', 'Organic'].map((quality) => (
+                      <TouchableOpacity
+                        key={quality}
+                        style={[
+                          styles.qualityOption,
+                          newListing.quality === quality && styles.qualityOptionSelected
+                        ]}
+                        onPress={() => setNewListing(prev => ({ ...prev, quality }))}
+                      >
+                        <Text style={[
+                          styles.qualityOptionText,
+                          newListing.quality === quality && styles.qualityOptionTextSelected
+                        ]}>
+                          {quality}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            </ScrollView>
+            
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={styles.cancelButton} 
+                onPress={() => setShowEditModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.saveButton} 
+                onPress={handleUpdateListing}
+              >
+                <Text style={styles.saveButtonText}>Update Listing</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   )
 }
@@ -967,6 +1531,291 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '600',
+  },
+
+  // Crop Listings Styles
+  cropListingsSection: {
+    paddingTop: 30,
+  },
+  cropListingsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 5,
+  },
+  addListingButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  addListingText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  cropListingsList: {
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  cropListingCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  cropListingHeader: {
+    marginBottom: 12,
+  },
+  cropListingInfo: {
+    flex: 1,
+  },
+  cropListingTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  cropListingName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    flex: 1,
+  },
+  qualityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  qualityText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cropListingDescription: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 18,
+  },
+  cropListingDetails: {
+    marginBottom: 16,
+  },
+  cropListingDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  cropListingDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 6,
+  },
+  cropListingDetailText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  cropListingActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+    paddingTop: 12,
+  },
+  cropListingTotal: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#4CAF50',
+  },
+  cropListingButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  cropListingButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 4,
+  },
+  editButton: {
+    backgroundColor: '#E3F2FD',
+  },
+  deleteButton: {
+    backgroundColor: '#FFEBEE',
+  },
+  editButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2196F3',
+  },
+  deleteButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#F44336',
+  },
+
+  // No Crop Listings Styles
+  noCropListingsContainer: {
+    alignItems: 'center',
+    padding: 40,
+    backgroundColor: 'white',
+    marginHorizontal: 20,
+    borderRadius: 15,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  noCropListingsText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 16,
+  },
+  noCropListingsSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
+  },
+  addFirstListingButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  addFirstListingText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  modalContent: {
+    padding: 20,
+    maxHeight: 400,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputRow: {
+    flexDirection: 'row',
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#333',
+    backgroundColor: '#FAFAFA',
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  qualitySelector: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  qualityOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    backgroundColor: '#FAFAFA',
+  },
+  qualityOptionSelected: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+  },
+  qualityOptionText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+  },
+  qualityOptionTextSelected: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    alignItems: 'center',
+  },
+  saveButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#4CAF50',
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  saveButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
   },
 })
 
