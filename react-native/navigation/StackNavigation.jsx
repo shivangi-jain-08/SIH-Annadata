@@ -7,6 +7,8 @@ import ChatBot from '../pages/ChatBot';
 import CropRecommendation from '../farmer/pages/CropRecommendation';
 import ParameterAnalysis from '../farmer/pages/ParameterAnalysis';
 import DiseaseDetection from '../farmer/pages/DiseaseDetection';
+import CropListings from '../farmer/CropListings';
+import AllOrders from '../farmer/AllOrders';
 import vDashboard from '../vendor/VDashboard';
 import ScreenWrapper from '../components/ScreenWrapper';
 import Terms from '../pages/Terms';
@@ -18,10 +20,12 @@ import Settings from '../pages/Settings';
 const Stack = createStackNavigator();
 
 // Wrapped standalone screens with FloatingChatBot
-const WrappedCropRecommendation = () => <ScreenWrapper><CropRecommendation /></ScreenWrapper>;
-const WrappedParameterAnalysis = () => <ScreenWrapper><ParameterAnalysis /></ScreenWrapper>;
-const WrappedDiseaseDetection = () => <ScreenWrapper><DiseaseDetection /></ScreenWrapper>;
-const WrappedVDashboard = () => <ScreenWrapper><vDashboard /></ScreenWrapper>;
+const WrappedCropRecommendation = (props) => <ScreenWrapper><CropRecommendation {...props} /></ScreenWrapper>;
+const WrappedParameterAnalysis = (props) => <ScreenWrapper><ParameterAnalysis {...props} /></ScreenWrapper>;
+const WrappedDiseaseDetection = (props) => <ScreenWrapper><DiseaseDetection {...props} /></ScreenWrapper>;
+const WrappedCropListings = (props) => <ScreenWrapper><CropListings {...props} /></ScreenWrapper>;
+const WrappedAllOrders = (props) => <ScreenWrapper><AllOrders {...props} /></ScreenWrapper>;
+const WrappedVDashboard = (props) => <ScreenWrapper><vDashboard {...props} /></ScreenWrapper>;
 
 // Wrapped pages without ChatBot
 const WrappedTerms = () => <ScreenWrapper showChatBot={false}><Terms /></ScreenWrapper>;
@@ -47,6 +51,8 @@ const StackNavigation = () => {
           <Stack.Screen name="CropRecommendation" component={WrappedCropRecommendation} />
           <Stack.Screen name="ParameterAnalysis" component={WrappedParameterAnalysis} />
           <Stack.Screen name="DiseaseDetection" component={WrappedDiseaseDetection} />
+          <Stack.Screen name="CropListings" component={WrappedCropListings} />
+          <Stack.Screen name="AllOrders" component={WrappedAllOrders} />
 
         {/* Vendors */}
         <Stack.Screen name="vDashboard" component={WrappedVDashboard} />
