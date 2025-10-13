@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { 
   View, 
   Text, 
@@ -8,10 +8,13 @@ import {
   FlatList,
   TextInput,
   Dimensions,
-  Alert
+  Alert,
+  ActivityIndicator,
+  RefreshControl
 } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import Icon from '../Icon'
+import ProductService from '../services/ProductService'
 
 const { width } = Dimensions.get('window')
 
@@ -68,8 +71,8 @@ const CropCard = ({ crop, onAddToCart, onRemoveFromCart }) => {
         </View>
 
         <View style={styles.priceContainer}>
-          <Text style={styles.price}>₹{crop.price}/kg</Text>
-          <Text style={styles.availableQuantity}>{crop.available} kg available</Text>
+          <Text style={styles.price}>₹{crop.price}/{crop.unit || 'kg'}</Text>
+          <Text style={styles.availableQuantity}>{crop.available} {crop.unit || 'kg'} available</Text>
         </View>
 
         <View style={styles.cartControls}>
@@ -108,7 +111,13 @@ const VBuyCrops = () => {
   const [selectedSort, setSelectedSort] = useState('name')
   const [searchText, setSearchText] = useState('')
   const [cartItemsCount, setCartItemsCount] = useState(0)
-  const [crops, setCrops] = useState([
+  const [crops, setCrops] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [error, setError] = useState(null)
+  
+  // Remove static data and replace with dynamic loading
+  const [staticCrops] = useState([
     {
       id: 1,
       name: 'Premium Wheat',
@@ -176,6 +185,78 @@ const VBuyCrops = () => {
       cartQuantity: 0
     }
   ])
+
+  // Load crops from farmers
+  const loadCropsFromFarmers = async () => {
+    try {
+      setError(null);
+      const response = await ProductService.getAllProducts(); // Get all farmers' products
+      
+      if (response.success && response.data) {
+        const formattedCrops = response.data
+          .map(product => ProductService.formatProductData(product))
+          .filter(product => product !== null && product.isActive) // Only active products
+          .map(product => ({
+            id: product.id,
+            name: product.cropName,
+            farmer: product.farmerName || 'Unknown Farmer',
+            location: product.location || 'Unknown Location',
+            quality: product.quality || 'Standard',
+            price: product.price,
+            available: product.availableQuantity,
+            category: mapCategory(product.category),
+            unit: product.unit || 'kg',
+            description: product.description,
+            harvestDate: product.harvestDate,
+            expiryDate: product.expiryDate,
+            cartQuantity: 0
+          }));
+        
+        setCrops(formattedCrops);
+        
+        // Handle offline/mock indicators
+        if (response.isOffline) {
+          setError('Using cached data - network unavailable');
+        } else if (response.isMock) {
+          setError('Using demo data - API unavailable');
+        }
+      }
+    } catch (err) {
+      console.error('Error loading crops:', err);
+      setError(err.message);
+      // Fallback to static data on error
+      setCrops(staticCrops.map(crop => ({ ...crop, cartQuantity: 0 })));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Map backend categories to frontend categories
+  const mapCategory = (backendCategory) => {
+    const categoryMap = {
+      'vegetables': 'vegetables',
+      'fruits': 'fruits', 
+      'grains': 'grains',
+      'pulses': 'grains', // Map pulses to grains for simplicity
+      'spices': 'cash_crops',
+      'herbs': 'vegetables',
+      'dairy': 'other',
+      'other': 'cash_crops'
+    };
+    return categoryMap[backendCategory?.toLowerCase()] || 'cash_crops';
+  };
+
+  // Handle refresh
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadCropsFromFarmers();
+    setRefreshing(false);
+  };
+
+  // Load data on component mount
+  useEffect(() => {
+    loadCropsFromFarmers();
+  }, []);
 
   const categories = [
     { name: 'All', value: 'all', icon: 'Grid3x3', color: '#666' },
@@ -284,8 +365,46 @@ const VBuyCrops = () => {
     return filteredCrops
   }
 
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.headerTop}>
+            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+              <Icon name="ArrowLeft" size={24} color="white" />
+            </TouchableOpacity>
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.headerTitle}>Buy Crops</Text>
+              <Text style={styles.headerSubtitle}>Source directly from farmers</Text>
+            </View>
+            <TouchableOpacity style={styles.cartButton} onPress={handleGoToCart}>
+              <Icon name="ShoppingCart" size={24} color="white" />
+              {cartItemsCount > 0 && (
+                <View style={styles.cartBadge}>
+                  <Text style={styles.cartBadgeText}>{cartItemsCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+        
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4CAF50" />
+          <Text style={styles.loadingText}>Loading crops from farmers...</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+      showsVerticalScrollIndicator={false}
+    >
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
@@ -295,6 +414,9 @@ const VBuyCrops = () => {
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerTitle}>Buy Crops</Text>
             <Text style={styles.headerSubtitle}>Source directly from farmers</Text>
+            {error && (
+              <Text style={styles.errorText}>{error}</Text>
+            )}
           </View>
           <TouchableOpacity style={styles.cartButton} onPress={handleGoToCart}>
             <Icon name="ShoppingCart" size={24} color="white" />
@@ -378,28 +500,41 @@ const VBuyCrops = () => {
         </ScrollView>
       </View>
 
-      {/* Crops List */}
-      <FlatList
-        data={getFilteredCrops()}
-        renderItem={({ item }) => (
-          <CropCard
-            crop={item}
-            onAddToCart={handleAddToCart}
-            onRemoveFromCart={handleRemoveFromCart}
-          />
-        )}
-        keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.cropsList}
-        showsVerticalScrollIndicator={false}
-      />
-
       {/* Results Info */}
-      <View style={styles.resultsInfo}>
+      <View style={styles.resultsInfoTop}>
         <Text style={styles.resultsText}>
           {getFilteredCrops().length} crops found
         </Text>
       </View>
-    </View>
+
+      {/* Crops List */}
+      <View style={styles.cropsListContainer}>
+        {getFilteredCrops().length > 0 ? (
+          getFilteredCrops().map((item) => (
+            <CropCard
+              key={item.id.toString()}
+              crop={item}
+              onAddToCart={handleAddToCart}
+              onRemoveFromCart={handleRemoveFromCart}
+            />
+          ))
+        ) : (
+          <View style={styles.noCropsContainer}>
+            <Icon name="Package" size={64} color="#ccc" />
+            <Text style={styles.noCropsText}>No crops found</Text>
+            <Text style={styles.noCropsSubtext}>
+              {searchText || selectedCategory !== 'all' 
+                ? 'Try adjusting your search or filters'
+                : 'No farmers have listed crops yet'
+              }
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Bottom Spacing */}
+      <View style={styles.bottomSpacing} />
+    </ScrollView>
   )
 }
 
@@ -407,6 +542,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 100,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 10,
   },
 
   // Header Styles
@@ -441,6 +587,12 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 16,
     color: 'rgba(255, 255, 255, 0.8)',
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#FFF9C4',
+    marginTop: 5,
+    fontStyle: 'italic',
   },
   cartButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -591,10 +743,9 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
 
-  // Crops List
-  cropsList: {
+  // Crops List Container
+  cropsListContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 20,
   },
   cropCard: {
     backgroundColor: 'white',
@@ -708,17 +859,57 @@ const styles = StyleSheet.create({
   },
 
   // Results Info
-  resultsInfo: {
+  resultsInfoTop: {
     paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingVertical: 15,
     backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    marginHorizontal: 20,
+    marginBottom: 15,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   resultsText: {
     fontSize: 14,
     color: '#666',
     textAlign: 'center',
+    fontWeight: '500',
+  },
+
+  // No Crops Container
+  noCropsContainer: {
+    alignItems: 'center',
+    padding: 40,
+    backgroundColor: 'white',
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderRadius: 15,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  noCropsText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 16,
+  },
+  noCropsSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
+  },
+
+  // Bottom Spacing
+  bottomSpacing: {
+    height: 30,
   },
 })
 

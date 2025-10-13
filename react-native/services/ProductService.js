@@ -75,6 +75,208 @@ class ProductService {
     }
   }
 
+  // Get all products from farmers (for vendors/consumers to browse)
+  async getAllProducts() {
+    try {
+      const authHeader = await this.getAuthHeader();
+      
+      console.log('ProductService: Fetching all products from farmers');
+      
+      // Fetch all products with farmer role filter
+      const response = await apiRequest(`${API_CONFIG.ENDPOINTS.PRODUCTS}?role=farmer`, {
+        method: 'GET',
+        headers: authHeader
+      });
+
+      if (response.success && response.data) {
+        // Handle different possible response structures
+        const products = response.data.products || response.data || [];
+        console.log('ProductService: Fetched products from farmers:', products.length);
+        
+        return {
+          success: true,
+          data: products,
+          message: 'Products fetched successfully'
+        };
+      } else {
+        throw new Error(response.message || 'Failed to fetch products');
+      }
+    } catch (error) {
+      console.error('Error fetching all products:', error);
+      
+      // Return mock data as fallback
+      const mockData = this.generateMockProductsWithFarmerDetails();
+      return {
+        success: false,
+        data: mockData,
+        message: 'Using mock data - API unavailable',
+        isMock: true
+      };
+    }
+  }
+
+  // Generate mock products with farmer details (populated sellerId)
+  generateMockProductsWithFarmerDetails() {
+    return [
+      {
+        _id: 'prod1',
+        name: 'Premium Wheat',
+        description: 'High quality organic wheat grown using traditional methods',
+        category: 'grains',
+        price: 35,
+        unit: 'kg',
+        availableQuantity: 500,
+        minimumOrderQuantity: 10,
+        quality: 'Organic',
+        harvestDate: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
+        expiryDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+        isActive: true,
+        sellerId: {
+          _id: 'farmer1',
+          name: 'Rajesh Kumar Singh',
+          role: 'farmer',
+          location: {
+            village: 'Khairpur Village',
+            district: 'Ludhiana',
+            state: 'Punjab'
+          },
+          address: 'Village Khairpur, Ludhiana, Punjab, India'
+        },
+        createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString()
+      },
+      {
+        _id: 'prod2',
+        name: 'Basmati Rice',
+        description: 'Aromatic long grain basmati rice, premium quality',
+        category: 'grains',
+        price: 45,
+        unit: 'kg',
+        availableQuantity: 300,
+        minimumOrderQuantity: 5,
+        quality: 'Premium',
+        harvestDate: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
+        expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
+        isActive: true,
+        sellerId: {
+          _id: 'farmer2',
+          name: 'Suresh Patel',
+          role: 'farmer',
+          location: {
+            village: 'Rohtak Village',
+            district: 'Rohtak',
+            state: 'Haryana'
+          },
+          address: 'Village Rohtak, Rohtak, Haryana, India'
+        },
+        createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString()
+      },
+      {
+        _id: 'prod3',
+        name: 'Fresh Tomatoes',
+        description: 'Farm fresh organic tomatoes, rich in nutrients',
+        category: 'vegetables',
+        price: 25,
+        unit: 'kg',
+        availableQuantity: 150,
+        minimumOrderQuantity: 2,
+        quality: 'Organic',
+        harvestDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+        expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        isActive: true,
+        sellerId: {
+          _id: 'farmer3',
+          name: 'Priya Sharma',
+          role: 'farmer',
+          location: {
+            village: 'Nashik Village',
+            district: 'Nashik',
+            state: 'Maharashtra'
+          },
+          address: 'Village Nashik, Nashik, Maharashtra, India'
+        },
+        createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+      },
+      {
+        _id: 'prod4',
+        name: 'Red Onions',
+        description: 'Fresh red onions, perfect for cooking',
+        category: 'vegetables',
+        price: 20,
+        unit: 'kg',
+        availableQuantity: 400,
+        minimumOrderQuantity: 5,
+        quality: 'Standard',
+        harvestDate: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString(),
+        expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        isActive: true,
+        sellerId: {
+          _id: 'farmer4',
+          name: 'Vikram Singh',
+          role: 'farmer',
+          location: {
+            village: 'Jodhpur Village',
+            district: 'Jodhpur',
+            state: 'Rajasthan'
+          },
+          address: 'Village Jodhpur, Jodhpur, Rajasthan, India'
+        },
+        createdAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString()
+      },
+      {
+        _id: 'prod5',
+        name: 'Fresh Apples',
+        description: 'Crisp and juicy apples from hill stations',
+        category: 'fruits',
+        price: 80,
+        unit: 'kg',
+        availableQuantity: 200,
+        minimumOrderQuantity: 1,
+        quality: 'Premium',
+        harvestDate: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString(),
+        expiryDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString(),
+        isActive: true,
+        sellerId: {
+          _id: 'farmer5',
+          name: 'Amit Gupta',
+          role: 'farmer',
+          location: {
+            village: 'Shimla Village',
+            district: 'Shimla',
+            state: 'Himachal Pradesh'
+          },
+          address: 'Village Shimla, Shimla, Himachal Pradesh, India'
+        },
+        createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString()
+      },
+      {
+        _id: 'prod6',
+        name: 'Cotton',
+        description: 'High quality cotton for textile industry',
+        category: 'other',
+        price: 55,
+        unit: 'kg',
+        availableQuantity: 350,
+        minimumOrderQuantity: 20,
+        quality: 'Standard',
+        harvestDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+        expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        isActive: true,
+        sellerId: {
+          _id: 'farmer6',
+          name: 'Ramesh Jain',
+          role: 'farmer',
+          location: {
+            village: 'Surat Village',
+            district: 'Surat',
+            state: 'Gujarat'
+          },
+          address: 'Village Surat, Surat, Gujarat, India'
+        },
+        createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      }
+    ];
+  }
+
   // Add new product
   async addProduct(productData) {
     try {
@@ -194,6 +396,24 @@ class ProductService {
       return null;
     }
     
+    // Extract farmer details from populated sellerId
+    const farmer = product.sellerId || {};
+    const farmerLocation = farmer.location || {};
+    
+    // Format farmer location
+    let locationString = 'Location not specified';
+    if (farmerLocation.district && farmerLocation.state) {
+      locationString = `${farmerLocation.district}, ${farmerLocation.state}`;
+    } else if (farmerLocation.village && farmerLocation.state) {
+      locationString = `${farmerLocation.village}, ${farmerLocation.state}`;
+    } else if (farmer.address) {
+      // Extract location from address if structured location not available
+      const addressParts = farmer.address.split(', ');
+      if (addressParts.length >= 2) {
+        locationString = addressParts.slice(-2).join(', '); // Take last 2 parts (district, state)
+      }
+    }
+    
     return {
       id: product._id || 'unknown',
       cropName: product.name || 'Unknown Product',
@@ -203,12 +423,16 @@ class ProductService {
       unit: product.unit,
       availableQuantity: product.availableQuantity,
       minimumOrderQuantity: product.minimumOrderQuantity,
-      location: product.location ? `${product.location.district || ''}, ${product.location.state || ''}`.trim() : 'Location not specified',
+      location: locationString,
       harvestDate: product.harvestDate ? this.formatDate(product.harvestDate) : '',
       expiryDate: product.expiryDate ? this.formatDate(product.expiryDate) : '',
       isActive: product.isActive,
       images: product.images || [],
-      quality: this.getQualityFromCategory(product.category),
+      quality: product.quality || this.getQualityFromCategory(product.category),
+      // Farmer details
+      farmerName: farmer.name || 'Unknown Farmer',
+      farmerId: farmer._id,
+      farmerRole: farmer.role,
       createdAt: product.createdAt,
       updatedAt: product.updatedAt
     };
