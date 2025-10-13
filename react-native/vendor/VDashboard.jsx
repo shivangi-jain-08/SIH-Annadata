@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { 
   View, 
   Text, 
@@ -6,9 +6,13 @@ import {
   ScrollView, 
   TouchableOpacity, 
   Dimensions,
-  Alert 
+  Alert,
+  ActivityIndicator,
+  RefreshControl
 } from 'react-native'
 import Icon from '../Icon'
+import VendorService from '../services/VendorService'
+import UserService from '../services/UserService'
 
 const { width } = Dimensions.get('window')
 
@@ -73,23 +77,106 @@ const QuickActionButton = ({ icon, title, color, onPress }) => {
 }
 
 const VDashboard = () => {
-  // Mock vendor statistics
-  const vendorStats = [
-    { 
-      title: 'Total Revenue', 
-      value: '₹3,25,000', 
-      change: 15.2, 
-      icon: 'DollarSign', 
-      color: '#4CAF50' 
-    },
-    { 
-      title: 'Active Orders', 
-      value: '24', 
-      change: 8.5, 
-      icon: 'ShoppingBag', 
-      color: '#FF9800' 
+  // State for vendor data
+  const [vendorData, setVendorData] = useState([]);
+  const [vendorStats, setVendorStats] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
+  const [recentActivity, setRecentActivity] = useState([]);
+  const [vendorName, setVendorName] = useState('Vendor');
+
+  // Load user data (vendor name)
+  const loadUserData = async () => {
+    try {
+      const currentUser = await UserService.getCurrentUser();
+      if (currentUser) {
+        const formattedUser = UserService.formatUserData(currentUser);
+        setVendorName(formattedUser.fullName || 'Vendor');
+      } else {
+        // Try to fetch fresh data from API
+        const userData = await UserService.fetchUserProfile();
+        if (userData) {
+          const formattedUser = UserService.formatUserData(userData);
+          setVendorName(formattedUser.fullName || 'Vendor');
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      // Keep default "Vendor" name on error
     }
-  ]
+  };
+
+  // Load vendor dashboard data
+  const loadVendorData = async () => {
+    try {
+      setError(null);
+      const response = await VendorService.getVendorDashboardData();
+      
+      if (response.success) {
+        const orders = response.data.orders || response.data || [];
+        setVendorData(orders);
+        
+        // Calculate metrics
+        const metrics = VendorService.calculateVendorMetrics(orders);
+        
+        // Set stats for display
+        const stats = [
+          { 
+            title: 'Total Revenue', 
+            value: VendorService.formatCurrency(metrics.totalRevenue), 
+            change: metrics.revenueGrowth, 
+            icon: 'DollarSign', 
+            color: '#4CAF50' 
+          },
+          { 
+            title: 'Active Orders', 
+            value: metrics.activeOrders.toString(), 
+            change: metrics.activeOrdersGrowth, 
+            icon: 'ShoppingBag', 
+            color: '#FF9800' 
+          }
+        ];
+        
+        setVendorStats(stats);
+        
+        // Set recent activity
+        const activity = VendorService.getRecentActivity(orders);
+        setRecentActivity(activity);
+        
+        // Handle offline/mock indicators
+        if (response.isMock) {
+          setError('Using demo data - API unavailable');
+        }
+      } else {
+        setError(response.error || 'Failed to load vendor data');
+      }
+    } catch (err) {
+      console.error('Error loading vendor data:', err);
+      setError(err.message || 'Failed to load data');
+      
+      // Set empty stats on error
+      setVendorStats([
+        { title: 'Total Revenue', value: '₹0', change: 0, icon: 'DollarSign', color: '#4CAF50' },
+        { title: 'Active Orders', value: '0', change: 0, icon: 'ShoppingBag', color: '#FF9800' }
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle refresh
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([loadUserData(), loadVendorData()]);
+    setRefreshing(false);
+  };
+
+  // Load data on component mount
+  useEffect(() => {
+    loadUserData();
+    loadVendorData();
+  }, []);
 
   const handleBuyFromFarmers = () => {
     Alert.alert(
@@ -132,15 +219,32 @@ const VDashboard = () => {
     Alert.alert('Profile', 'Opening profile settings...')
   }
 
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FF9800" />
+        <Text style={styles.loadingText}>Loading dashboard...</Text>
+      </View>
+    );
+  }
+
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View style={styles.welcomeSection}>
             <Text style={styles.welcomeText}>Welcome back,</Text>
-            <Text style={styles.vendorName}>Vendor Name</Text>
+            <Text style={styles.vendorName}>{vendorName}</Text>
             <Text style={styles.headerSubtitle}>Manage your crop business efficiently</Text>
+            {error && (
+              <Text style={styles.errorText}>{error}</Text>
+            )}
           </View>
           <TouchableOpacity style={styles.notificationButton} onPress={handleNotifications}>
             <Icon name="Bell" size={24} color="white" />
@@ -151,7 +255,7 @@ const VDashboard = () => {
         </View>
       </View>
 
-      {/* Stats Section */}
+      {/* Business Overview Section */}
       <View style={styles.statsSection}>
         <Text style={styles.sectionTitle}>Business Overview</Text>
         <View style={styles.statsGrid}>
@@ -166,56 +270,6 @@ const VDashboard = () => {
             />
           ))}
         </View>
-      </View>
-
-      {/* Quick Actions */}
-      <View style={styles.quickActionsSection}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        <View style={styles.quickActionsGrid}>
-          <QuickActionButton
-            icon="Package"
-            title="Inventory"
-            color="#9C27B0"
-            onPress={handleInventory}
-          />
-          <QuickActionButton
-            icon="ChartBar"
-            title="Analytics"
-            color="#FF5722"
-            onPress={handleAnalytics}
-          />
-          <QuickActionButton
-            icon="User"
-            title="Profile"
-            color="#607D8B"
-            onPress={handleProfile}
-          />
-        </View>
-      </View>
-
-      {/* Main Actions Section */}
-      <View style={styles.actionsSection}>
-        <Text style={styles.sectionTitle}>Business Operations</Text>
-        
-        {/* Buy from Farmers */}
-        <ActionCard
-          title="Buy Crops from Farmers"
-          description="Source fresh crops directly from local farmers at competitive prices"
-          icon="ShoppingCart"
-          color="#4CAF50"
-          onPress={handleBuyFromFarmers}
-          buttonText="Browse Farmers"
-        />
-
-        {/* Sell to Consumers */}
-        <ActionCard
-          title="Sell Crops to Consumers"
-          description="Connect with consumers and sell your quality crops online"
-          icon="Store"
-          color="#FF9800"
-          onPress={handleSellToConsumers}
-          buttonText="Start Selling"
-        />
       </View>
 
       {/* Nearby Consumers Section */}
@@ -257,39 +311,54 @@ const VDashboard = () => {
         </View>
       </View>
 
+      {/* Quick Actions */}
+      <View style={styles.quickActionsSection}>
+        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <View style={styles.quickActionsGrid}>
+          <QuickActionButton
+            icon="Package"
+            title="Inventory"
+            color="#9C27B0"
+            onPress={handleInventory}
+          />
+          <QuickActionButton
+            icon="ChartBar"
+            title="Analytics"
+            color="#FF5722"
+            onPress={handleAnalytics}
+          />
+          <QuickActionButton
+            icon="User"
+            title="Profile"
+            color="#607D8B"
+            onPress={handleProfile}
+          />
+        </View>
+      </View>
+
       {/* Recent Activity Section */}
       <View style={styles.recentActivitySection}>
         <Text style={styles.sectionTitle}>Recent Activity</Text>
         <View style={styles.activityCard}>
-          <View style={styles.activityItem}>
-            <View style={[styles.activityIcon, { backgroundColor: '#4CAF5020' }]}>
-              <Icon name="Check" size={16} color="#4CAF50" />
+          {recentActivity.length > 0 ? (
+            recentActivity.map((activity, index) => (
+              <View key={activity.id || index} style={styles.activityItem}>
+                <View style={[styles.activityIcon, { backgroundColor: activity.color + '20' }]}>
+                  <Icon name={activity.icon} size={16} color={activity.color} />
+                </View>
+                <View style={styles.activityContent}>
+                  <Text style={styles.activityText}>{activity.activity}</Text>
+                  <Text style={styles.activityTime}>{activity.timeAgo}</Text>
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={styles.noActivityContainer}>
+              <Icon name="Clock" size={32} color="#ccc" />
+              <Text style={styles.noActivityText}>No recent activity</Text>
+              <Text style={styles.noActivitySubtext}>Your order activities will appear here</Text>
             </View>
-            <View style={styles.activityContent}>
-              <Text style={styles.activityText}>Order #VND001 completed</Text>
-              <Text style={styles.activityTime}>2 hours ago</Text>
-            </View>
-          </View>
-
-          <View style={styles.activityItem}>
-            <View style={[styles.activityIcon, { backgroundColor: '#FF980020' }]}>
-              <Icon name="Plus" size={16} color="#FF9800" />
-            </View>
-            <View style={styles.activityContent}>
-              <Text style={styles.activityText}>New consumer registered nearby</Text>
-              <Text style={styles.activityTime}>5 hours ago</Text>
-            </View>
-          </View>
-
-          <View style={styles.activityItem}>
-            <View style={[styles.activityIcon, { backgroundColor: '#2196F320' }]}>
-              <Icon name="Truck" size={16} color="#2196F3" />
-            </View>
-            <View style={styles.activityContent}>
-              <Text style={styles.activityText}>Shipment dispatched to Delhi</Text>
-              <Text style={styles.activityTime}>1 day ago</Text>
-            </View>
-          </View>
+          )}
         </View>
       </View>
     </ScrollView>
@@ -300,6 +369,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 10,
   },
 
   // Header Styles
@@ -333,6 +413,12 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.8)',
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#FFF9C4',
+    marginTop: 5,
+    fontStyle: 'italic',
   },
   notificationButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -629,6 +715,24 @@ const styles = StyleSheet.create({
   activityTime: {
     fontSize: 12,
     color: '#666',
+  },
+
+  // No Activity Styles
+  noActivityContainer: {
+    alignItems: 'center',
+    padding: 30,
+  },
+  noActivityText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+    marginTop: 10,
+  },
+  noActivitySubtext: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 5,
+    textAlign: 'center',
   },
 })
 
