@@ -64,8 +64,7 @@ def imageclassifier(ar):
                       hidden_units=64, 
                       output_shape=len(class_dict))
 
-    model_pathd = os.path.join("Super_models", "Super_Modelv5.pth")
-    loaded_model_2.load_state_dict(torch.load(model_pathd, map_location=torch.device("cpu")))
+    loaded_model_2.load_state_dict(torch.load("SIH-Annadata\\python-ml-service\\Super_models\\Super_Modelv5.pth", map_location=torch.device("cpu")))
 
 
     loaded_model_2 = loaded_model_2.to(device)
