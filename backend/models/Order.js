@@ -38,13 +38,27 @@ const orderSchema = new mongoose.Schema({
   }],
   status: {
     type: String,
-    enum: ['pending', 'confirmed', 'in_transit', 'delivered', 'cancelled'],
+    enum: ['pending', 'confirmed', 'processing', 'in_transit', 'shipped', 'delivered', 'cancelled'],
     default: 'pending'
   },
   totalAmount: {
     type: Number,
     required: [true, 'Total amount is required'],
     min: [0, 'Total amount cannot be negative']
+  },
+  subtotal: {
+    type: Number,
+    min: [0, 'Subtotal cannot be negative']
+  },
+  deliveryFee: {
+    type: Number,
+    default: 0,
+    min: [0, 'Delivery fee cannot be negative']
+  },
+  tax: {
+    type: Number,
+    default: 0,
+    min: [0, 'Tax cannot be negative']
   },
   deliveryAddress: {
     type: String,
@@ -54,8 +68,7 @@ const orderSchema = new mongoose.Schema({
   deliveryLocation: {
     type: {
       type: String,
-      enum: ['Point'],
-      default: 'Point'
+      enum: ['Point']
     },
     coordinates: {
       type: [Number], // [longitude, latitude]
@@ -102,9 +115,10 @@ orderSchema.virtual('orderDuration').get(function() {
   return Math.ceil((this.actualDelivery - this.createdAt) / (1000 * 60 * 60 * 24)); // days
 });
 
-// Pre-save middleware to calculate total amount
+// Pre-save middleware to calculate total amount if not provided
 orderSchema.pre('save', function(next) {
-  if (this.isModified('products')) {
+  // Only auto-calculate if totalAmount is not explicitly set
+  if (this.isModified('products') && !this.isModified('totalAmount')) {
     this.totalAmount = this.products.reduce((total, product) => {
       return total + (product.quantity * product.price);
     }, 0);

@@ -102,6 +102,16 @@ router.put('/location',
   userController.updateLocation
 );
 
+// Update location with tracking data (for real-time tracking)
+router.post('/update-location',
+  userController.updateLocationTracking
+);
+
+// Get nearby vendors for consumers
+router.get('/nearby-vendors',
+  userController.getNearbyVendors
+);
+
 // Get user by ID (public info)
 router.get('/:userId',
   userIdValidation,

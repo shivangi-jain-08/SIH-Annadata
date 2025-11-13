@@ -138,23 +138,44 @@ const updateOrderStatus = async (req, res) => {
     const { orderId } = req.params;
     const { status, deliveryDate } = req.body;
 
+    console.log('=== Update Order Status ===');
+    console.log('Order ID:', orderId);
+    console.log('New Status:', status);
+    console.log('User ID:', req.user?._id);
+    console.log('Delivery Date:', deliveryDate);
+
     const order = await Order.findById(orderId);
     
     if (!order) {
+      console.log('Order not found:', orderId);
       return res.status(404).json({
         success: false,
         message: 'Order not found'
       });
     }
 
+    console.log('Order found:', {
+      _id: order._id,
+      buyerId: order.buyerId,
+      sellerId: order.sellerId,
+      currentStatus: order.status
+    });
+
     // Check if user is authorized to update this order
     if (order.buyerId.toString() !== req.user._id.toString() && 
         order.sellerId.toString() !== req.user._id.toString()) {
+      console.log('Unauthorized access attempt:', {
+        userId: req.user._id,
+        buyerId: order.buyerId,
+        sellerId: order.sellerId
+      });
       return res.status(403).json({
         success: false,
         message: 'Unauthorized to update this order'
       });
     }
+
+    console.log('User authorized. Updating status from', order.status, 'to', status);
 
     // Update status
     order.status = status;
@@ -163,6 +184,11 @@ const updateOrderStatus = async (req, res) => {
     }
     await order.save();
 
+    console.log('Order status updated successfully:', {
+      orderId: order._id,
+      newStatus: order.status
+    });
+
     res.json({
       success: true,
       message: 'Order status updated successfully',
@@ -170,9 +196,15 @@ const updateOrderStatus = async (req, res) => {
     });
   } catch (error) {
     logger.error('Update order status failed:', error);
+    console.error('=== Update Order Status Error ===');
+    console.error('Error:', error);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    
     res.status(500).json({
       success: false,
-      message: 'Failed to update order status'
+      message: 'Failed to update order status',
+      error: error.message
     });
   }
 };
@@ -731,8 +763,296 @@ const getUnreadMessageCounts = async (req, res) => {
   }
 };
 
+/**
+ * Get consumer location for specific order (for vendors)
+ */
+const getConsumerLocationForOrder = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    
+    const order = await Order.findById(orderId)
+      .populate('buyerId', 'name phone location');
+    
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    // Verify the vendor is the seller for this order
+    const userId = req.user ? req.user._id.toString() : null;
+    if (userId && order.sellerId.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized to view consumer location'
+      });
+    }
+
+    // Only share location if order is confirmed or in_transit
+    if (!['confirmed', 'in_transit', 'delivered'].includes(order.status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Consumer location available only for confirmed orders'
+      });
+    }
+
+    const { User } = require('../models');
+    const consumer = await User.findById(order.buyerId).select('name phone location lastLocationUpdate');
+
+    res.json({
+      success: true,
+      message: 'Consumer location retrieved successfully',
+      data: {
+        location: consumer?.location || order.deliveryLocation,
+        consumerName: consumer?.name,
+        consumerPhone: consumer?.phone,
+        lastUpdate: consumer?.lastLocationUpdate,
+        orderId: order._id,
+        orderStatus: order.status
+      }
+    });
+  } catch (error) {
+    logger.error('Get consumer location for order failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve consumer location'
+    });
+  }
+};
+
+/**
+ * Share consumer location for specific order
+ */
+const shareLocationForOrder = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { location, timestamp } = req.body;
+    
+    if (!location || !location.coordinates) {
+      return res.status(400).json({
+        success: false,
+        message: 'Location coordinates are required'
+      });
+    }
+
+    const order = await Order.findById(orderId);
+    
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    // Verify the consumer is the buyer for this order
+    const userId = req.user ? req.user._id.toString() : null;
+    if (userId && order.buyerId.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized to share location for this order'
+      });
+    }
+
+    // Update consumer's location
+    const { User } = require('../models');
+    await User.findByIdAndUpdate(order.buyerId, {
+      $set: {
+        location: location,
+        lastLocationUpdate: timestamp || new Date()
+      }
+    });
+
+    // Broadcast location update to vendor via Socket.io
+    const socketService = require('../services/socketService');
+    socketService.sendMessageToUser(order.sellerId, 'consumer-location-update', {
+      orderId: order._id,
+      location: location,
+      timestamp: timestamp || new Date()
+    });
+
+    res.json({
+      success: true,
+      message: 'Location shared successfully',
+      data: {
+        orderId: order._id,
+        location,
+        timestamp: timestamp || new Date()
+      }
+    });
+  } catch (error) {
+    logger.error('Share location for order failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to share location'
+    });
+  }
+};
+
+/**
+ * Complete order after successful payment
+ * Creates order and updates farmer inventory
+ */
+const completeOrder = async (req, res) => {
+  try {
+    const { 
+      buyerId, 
+      items, 
+      deliveryAddress, 
+      totalAmount,
+      subtotal,
+      tax,
+      deliveryFee,
+      paymentMethod,
+      paymentId,
+      razorpayOrderId,
+      razorpayPaymentId,
+      status 
+    } = req.body;
+
+    // Use authenticated user if not provided
+    const actualBuyerId = buyerId || (req.user ? req.user._id : null);
+    
+    if (!actualBuyerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Buyer ID is required'
+      });
+    }
+
+    // Group items by farmer (sellerId)
+    const ordersByFarmer = {};
+    
+    for (const item of items) {
+      const farmerId = item.farmerId || item.farmer;
+      
+      if (!farmerId) {
+        return res.status(400).json({
+          success: false,
+          message: `Farmer ID missing for item ${item.name}`
+        });
+      }
+
+      if (!ordersByFarmer[farmerId]) {
+        ordersByFarmer[farmerId] = [];
+      }
+      
+      ordersByFarmer[farmerId].push(item);
+    }
+
+    // Create separate orders for each farmer
+    const createdOrders = [];
+    
+    for (const [farmerId, farmerItems] of Object.entries(ordersByFarmer)) {
+      // Validate products and update inventory
+      const orderProducts = [];
+      let farmerTotal = 0;
+
+      for (const item of farmerItems) {
+        const product = await Product.findById(item.productId);
+        
+        if (!product || !product.isActive) {
+          return res.status(400).json({
+            success: false,
+            message: `Product ${item.name} not found or inactive`
+          });
+        }
+
+        if (product.availableQuantity < item.quantity) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient quantity for product ${product.name}. Available: ${product.availableQuantity}`
+          });
+        }
+
+        // Reduce inventory immediately
+        await product.reduceQuantity(item.quantity);
+        
+        const itemTotal = item.quantity * item.price;
+        farmerTotal += itemTotal;
+
+        orderProducts.push({
+          productId: item.productId,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          unit: product.unit
+        });
+
+        console.log(`✅ Reduced inventory for ${product.name}: ${product.availableQuantity + item.quantity} → ${product.availableQuantity}`);
+      }
+
+      // Calculate the correct total amount including delivery fee
+      // If there's only one farmer, use the full totalAmount
+      // If multiple farmers, distribute delivery fee proportionally
+      const numberOfFarmers = Object.keys(ordersByFarmer).length;
+      const farmerDeliveryFee = numberOfFarmers > 1 ? (deliveryFee || 0) / numberOfFarmers : (deliveryFee || 0);
+      const farmerTotalWithDelivery = farmerTotal + farmerDeliveryFee;
+
+      // Create order for this farmer
+      const orderData = {
+        buyerId: actualBuyerId,
+        sellerId: farmerId,
+        products: orderProducts,
+        totalAmount: farmerTotalWithDelivery,
+        subtotal: farmerTotal,
+        deliveryFee: farmerDeliveryFee,
+        tax: tax || 0,
+        status: status || 'confirmed',
+        notes: `Payment Method: ${paymentMethod}\nPayment ID: ${paymentId}\nRazorpay Order ID: ${razorpayOrderId}`
+      };
+
+      // Handle delivery address - can be string or object
+      if (typeof deliveryAddress === 'string') {
+        orderData.deliveryAddress = deliveryAddress;
+      } else if (deliveryAddress && typeof deliveryAddress === 'object') {
+        // If it's an object, extract the string representation
+        if (deliveryAddress.street) {
+          orderData.deliveryAddress = `${deliveryAddress.street}${deliveryAddress.city ? ', ' + deliveryAddress.city : ''}${deliveryAddress.state ? ', ' + deliveryAddress.state : ''}${deliveryAddress.pincode ? ' - ' + deliveryAddress.pincode : ''}`;
+        } else {
+          orderData.deliveryAddress = deliveryAddress.toString();
+        }
+        
+        // Add coordinates if available
+        if (deliveryAddress.coordinates && Array.isArray(deliveryAddress.coordinates) && deliveryAddress.coordinates.length === 2) {
+          orderData.deliveryLocation = {
+            type: 'Point',
+            coordinates: deliveryAddress.coordinates
+          };
+        }
+      }
+
+      const order = new Order(orderData);
+
+      await order.save();
+      createdOrders.push(order);
+
+      console.log(`✅ Order created for farmer ${farmerId}: ${order._id}`);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `${createdOrders.length} order(s) created successfully`,
+      data: {
+        orders: createdOrders,
+        orderCount: createdOrders.length,
+        totalAmount,
+        paymentId
+      }
+    });
+
+  } catch (error) {
+    logger.error('Complete order failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to complete order: ' + error.message
+    });
+  }
+};
+
 module.exports = {
   createOrder,
+  completeOrder,
   getOrderById,
   updateOrderStatus,
   cancelOrder,
@@ -742,5 +1062,7 @@ module.exports = {
   sendOrderMessage,
   getOrderMessages,
   markMessagesAsRead,
-  getUnreadMessageCounts
+  getUnreadMessageCounts,
+  getConsumerLocationForOrder,
+  shareLocationForOrder
 };

@@ -56,6 +56,64 @@ const userSchema = new mongoose.Schema({
     trim: true,
     maxlength: [500, 'Address cannot exceed 500 characters']
   },
+  addresses: [{
+    id: {
+      type: String,
+      required: true
+    },
+    label: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: [50, 'Address label cannot exceed 50 characters']
+    },
+    street: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: [200, 'Street address cannot exceed 200 characters']
+    },
+    city: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: [100, 'City name cannot exceed 100 characters']
+    },
+    state: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: [100, 'State name cannot exceed 100 characters']
+    },
+    pincode: {
+      type: String,
+      required: true,
+      trim: true,
+      match: [/^\d{6}$/, 'Pincode must be 6 digits']
+    },
+    phone: {
+      type: String,
+      required: true,
+      trim: true,
+      match: [/^\d{10}$/, 'Phone must be 10 digits']
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  lastLocationUpdate: {
+    type: Date
+  },
+  locationAccuracy: {
+    type: Number
+  },
+  heading: {
+    type: Number
+  },
+  speed: {
+    type: Number
+  },
   isActive: {
     type: Boolean,
     default: true

@@ -44,14 +44,14 @@ const getProfile = async (req, res) => {
  */
 const updateProfile = async (req, res) => {
   try {
-    const { name, phone, address, location } = req.body;
+    const { name, phone, address, location, addresses } = req.body;
 
     // For testing without auth, return success with mock data
     if (!req.user) {
       return res.json({
         success: true,
         message: 'Profile updated successfully (test mode)',
-        data: { user: { name: name || 'Test User', phone, address, location } }
+        data: { user: { name: name || 'Test User', phone, address, location, addresses } }
       });
     }
 
@@ -64,6 +64,10 @@ const updateProfile = async (req, res) => {
         type: 'Point',
         coordinates: location
       };
+    }
+    // Handle addresses array - completely replace it
+    if (addresses && Array.isArray(addresses)) {
+      updates.addresses = addresses;
     }
 
     const user = await User.findByIdAndUpdate(
@@ -382,10 +386,132 @@ const getUserStats = async (req, res) => {
   }
 };
 
+/**
+ * Update user location with additional tracking data
+ */
+const updateLocationTracking = async (req, res) => {
+  try {
+    const { location, accuracy, heading, speed, timestamp, role } = req.body;
+
+    if (!location || !location.coordinates) {
+      return res.status(400).json({
+        success: false,
+        message: 'Location coordinates are required'
+      });
+    }
+
+    // For testing without auth, return success with mock data
+    if (!req.user) {
+      return res.json({
+        success: true,
+        message: 'Location tracking updated successfully (test mode)',
+        data: { location, accuracy, timestamp }
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      {
+        $set: {
+          location: location,
+          lastLocationUpdate: timestamp || new Date(),
+          ...(accuracy && { locationAccuracy: accuracy }),
+          ...(heading !== undefined && { heading }),
+          ...(speed !== undefined && { speed })
+        }
+      },
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    // Broadcast location update via Socket.io if vendor
+    if (user.role === 'vendor') {
+      const socketService = require('../services/socketService');
+      socketService.broadcastVendorLocationUpdate(
+        user._id,
+        user.name,
+        location.coordinates,
+        true
+      );
+    }
+
+    res.json({
+      success: true,
+      message: 'Location tracking updated successfully',
+      data: { location, accuracy, timestamp }
+    });
+  } catch (error) {
+    logger.error('Update location tracking failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update location tracking'
+    });
+  }
+};
+
+/**
+ * Get nearby vendors for consumers
+ */
+const getNearbyVendors = async (req, res) => {
+  try {
+    const { lat, lng, radius = 10 } = req.query;
+
+    if (!lat || !lng) {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude and longitude are required'
+      });
+    }
+
+    const latitude = parseFloat(lat);
+    const longitude = parseFloat(lng);
+    const radiusInMeters = parseFloat(radius) * 1000; // Convert km to meters
+
+    if (isNaN(latitude) || isNaN(longitude)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid coordinates'
+      });
+    }
+
+    const vendors = await User.find({
+      role: 'vendor',
+      location: {
+        $near: {
+          $geometry: {
+            type: 'Point',
+            coordinates: [longitude, latitude]
+          },
+          $maxDistance: radiusInMeters
+        }
+      }
+    })
+    .select('name phone location lastLocationUpdate')
+    .limit(50);
+
+    res.json({
+      success: true,
+      message: 'Nearby vendors retrieved successfully',
+      data: {
+        vendors,
+        count: vendors.length,
+        searchRadius: radius
+      }
+    });
+  } catch (error) {
+    logger.error('Get nearby vendors failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve nearby vendors'
+    });
+  }
+};
+
 module.exports = {
   getProfile,
   updateProfile,
   updateLocation,
+  updateLocationTracking,
+  getNearbyVendors,
   getUserById,
   getNearbyUsers,
   searchUsers,

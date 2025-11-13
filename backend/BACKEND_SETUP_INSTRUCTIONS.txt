@@ -1,0 +1,55 @@
+// Add these lines to your backend/server.js file
+
+// ==========================================
+// RAZORPAY PAYMENT INTEGRATION
+// ==========================================
+
+// 1. Install Razorpay SDK (run this command):
+// npm install razorpay
+
+// 2. Add to your .env file:
+/*
+RAZORPAY_KEY_ID=rzp_test_RUvp6HCCUIF7NO
+RAZORPAY_KEY_SECRET=1HQALNfaGbb5W4IoqXCqrXlo
+*/
+
+// 3. Import the payment routes (add this near your other route imports):
+const paymentRoutes = require('./routes/payment');
+
+// 4. Register the payment routes (add this after your other route registrations):
+app.use('/api/orders', paymentRoutes);
+
+// That's it! Your payment endpoints are now available:
+// - POST /api/orders/create
+// - POST /api/orders/verify-payment
+// - GET /api/orders/payment-status/:paymentId
+// - POST /api/orders/refund
+// - POST /api/orders/webhook
+
+// ==========================================
+// EXAMPLE: How to add to existing server.js
+// ==========================================
+
+/*
+// ... existing imports
+const authRoutes = require('./routes/auth');
+const userRoutes = require('./routes/users');
+const productRoutes = require('./routes/products');
+const orderRoutes = require('./routes/orders');
+
+// ADD THIS LINE:
+const paymentRoutes = require('./routes/payment');
+
+// ... middleware setup
+
+// ... existing routes
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/orders', orderRoutes);
+
+// ADD THIS LINE (Note: This extends /api/orders with payment endpoints):
+app.use('/api/orders', paymentRoutes);
+
+// ... rest of server setup
+*/

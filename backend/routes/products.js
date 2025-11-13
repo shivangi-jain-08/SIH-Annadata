@@ -187,7 +187,7 @@ router.get('/by-role/:role', auth, async (req, res) => {
       isActive: true,
       availableQuantity: { $gt: 0 }
     })
-      .populate('sellerId', 'name phone location role')
+      .populate('sellerId', 'name phone location address role')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));

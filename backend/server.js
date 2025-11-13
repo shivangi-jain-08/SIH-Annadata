@@ -162,6 +162,9 @@ class Server {
     // API routes
     this.app.use('/api', apiRoutes);
 
+    const paymentRoutes = require('./routes/payment');
+    this.app.use('/api/orders', paymentRoutes);
+
     logger.info('Routes setup completed');
   }
 

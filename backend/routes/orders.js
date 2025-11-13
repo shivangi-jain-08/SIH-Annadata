@@ -44,7 +44,7 @@ const createOrderValidation = [
 
 const updateStatusValidation = [
   body('status')
-    .isIn(['pending', 'confirmed', 'in_transit', 'delivered', 'cancelled'])
+    .isIn(['pending', 'confirmed', 'processing', 'in_transit', 'shipped', 'delivered', 'cancelled'])
     .withMessage('Invalid status'),
   body('deliveryDate')
     .optional()
@@ -113,6 +113,12 @@ router.post('/',
   createOrderValidation,
   validateRequest,
   orderController.createOrder
+);
+
+// Complete order after payment (creates order + updates inventory)
+router.post('/complete',
+  auth,
+  orderController.completeOrder
 );
 
 // Get order by ID
@@ -264,6 +270,22 @@ router.put('/:orderId/messages/read',
 router.get('/messages/unread-counts',
   auth,
   orderController.getUnreadMessageCounts
+);
+
+// Get consumer location for order (vendor only, for confirmed orders)
+router.get('/:orderId/consumer-location',
+  auth,
+  orderIdValidation,
+  validateRequest,
+  orderController.getConsumerLocationForOrder
+);
+
+// Share consumer location for order (consumer only)
+router.post('/:orderId/share-location',
+  auth,
+  orderIdValidation,
+  validateRequest,
+  orderController.shareLocationForOrder
 );
 
 module.exports = router;
