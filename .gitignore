@@ -11,6 +11,7 @@ __tests__
 .env
 .env.local
 .env.production
+.env.razorpay
 
 # Firebase credentials
 serviceAccountKey.json
