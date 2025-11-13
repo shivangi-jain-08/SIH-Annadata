@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { 
   View, 
   Text, 
@@ -8,31 +8,44 @@ import {
   Image,
   Dimensions,
   FlatList,
-  Alert
+  Alert,
+  ActivityIndicator,
+  RefreshControl,
+  TextInput
 } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
+import { useFocusEffect } from '@react-navigation/native'
 import Icon from '../Icon'
+import UserService from '../services/UserService'
+import ProductService from '../services/ProductService'
+import CartService from '../services/CartService'
 
 const { width } = Dimensions.get('window')
 
 const heroSlides = [
   {
-    title: "Empowering Farmers, Enriching Communities",
-    description: "Connect directly with farmers, eliminate middlemen, and ensure fair pricing for all. Join the agricultural revolution today.",
-    image: "https://i.ibb.co/xtSvh0kv/RESEARCH-1.jpg",
-    alt: "Farmers in field"
+    title: "#FASHION DAY",
+    subtitle: "80% OFF",
+    description: "Discover fashion that suits to your style",
+    buttonText: "Check this out",
+    image: "https://images.unsplash.com/photo-1490114538077-0a7f8cb49891?w=800",
+    alt: "Fashion sale"
   },
   {
-    title: "Fresh Produce, Fair Prices",
-    description: "Get access to farm-fresh produce at transparent prices while supporting local farmers and sustainable agriculture.",
-    image: "https://media.istockphoto.com/id/503646746/photo/farmer-spreading-fertilizer-in-the-field-wheat.jpg?s=612x612&w=0&k=20&c=Lgxsjbz0jaYyQrvfzhyAsW2zELtshRP4AtLzkpmcLiE=",
-    alt: "Fresh produce at Doorstep"
+    title: "#FRESH HARVEST",
+    subtitle: "50% OFF",
+    description: "Farm-fresh produce delivered to your doorstep",
+    buttonText: "Shop Now",
+    image: "https://images.unsplash.com/photo-1464226184884-fa280b87c399?w=800",
+    alt: "Fresh produce"
   },
   {
-    title: "Sow with Confidence, Grow with Krishika!",
-    description: "Inspiring farmers to plant with assurance and nurture their dreams into reality through the trusted support of Krishika.",
-    image: "https://i.ibb.co/1YQX4Yvs/image.png",
-    alt: "Your Field Companion"
+    title: "#ORGANIC DEALS",
+    subtitle: "60% OFF",
+    description: "Quality organic products at best prices",
+    buttonText: "Explore",
+    image: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800",
+    alt: "Organic products"
   }
 ];
 
@@ -48,10 +61,6 @@ const HeroSlide = ({ slide, isActive }) => {
         <View style={styles.heroContent}>
           <Text style={styles.heroTitle}>{slide.title}</Text>
           <Text style={styles.heroDescription}>{slide.description}</Text>
-          <TouchableOpacity style={styles.heroButton}>
-            <Text style={styles.heroButtonText}>Get Started</Text>
-            <Icon name="ArrowRight" size={16} color="white" />
-          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -71,37 +80,50 @@ const CategoryCard = ({ category, onPress }) => {
 }
 
 const RecentCropCard = ({ crop, onAddToCart, onViewDetails }) => {
+  // Ensure all values are safe to render
+  const safeCrop = {
+    name: String(crop.name || 'Product'),
+    vendor: String(crop.vendor || 'Vendor'),
+    location: String(crop.location || 'Location'),
+    price: Number(crop.price) || 0,
+    originalPrice: Number(crop.originalPrice) || 0,
+    rating: Number(crop.rating) || 0,
+    reviews: Number(crop.reviews) || 0,
+    badge: String(crop.badge || 'Fresh'),
+    image: String(crop.image || 'https://via.placeholder.com/150'),
+  }
+
   return (
     <View style={styles.cropCard}>
       <View style={styles.cropImageContainer}>
         <Image 
-          source={{ uri: crop.image }} 
+          source={{ uri: safeCrop.image }} 
           style={styles.cropImage}
           resizeMode="cover"
         />
         <View style={styles.cropBadge}>
-          <Text style={styles.cropBadgeText}>{crop.badge}</Text>
+          <Text style={styles.cropBadgeText}>{safeCrop.badge}</Text>
         </View>
       </View>
       
       <View style={styles.cropInfo}>
-        <Text style={styles.cropName}>{crop.name}</Text>
-        <Text style={styles.vendorName}>by {crop.vendor}</Text>
+        <Text style={styles.cropName}>{safeCrop.name}</Text>
+        <Text style={styles.vendorName}>by {safeCrop.vendor}</Text>
         
         <View style={styles.cropLocation}>
           <Icon name="MapPin" size={12} color="#666" />
-          <Text style={styles.locationText}>{crop.location}</Text>
+          <Text style={styles.locationText}>{safeCrop.location}</Text>
         </View>
         
         <View style={styles.cropPricing}>
-          <Text style={styles.cropPrice}>₹{crop.price}/kg</Text>
-          <Text style={styles.cropOriginalPrice}>₹{crop.originalPrice}</Text>
+          <Text style={styles.cropPrice}>₹{safeCrop.price}/kg</Text>
+          <Text style={styles.cropOriginalPrice}>₹{safeCrop.originalPrice}</Text>
         </View>
         
         <View style={styles.cropRating}>
           <Icon name="Star" size={14} color="#FFD700" />
-          <Text style={styles.ratingText}>{crop.rating}</Text>
-          <Text style={styles.reviewCount}>({crop.reviews})</Text>
+          <Text style={styles.ratingText}>{safeCrop.rating}</Text>
+          <Text style={styles.reviewCount}>({safeCrop.reviews})</Text>
         </View>
         
         <View style={styles.cropActions}>
@@ -135,12 +157,173 @@ const QuickActionCard = ({ action, onPress }) => {
 
 const CDashboard = () => {
   const navigation = useNavigation()
-  const [currentSlide, setCurrentSlide] = useState(0)
   const [cartItemsCount, setCartItemsCount] = useState(0)
-  const heroScrollRef = useRef(null)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [consumerName, setConsumerName] = useState('Consumer')
+  const [recentCrops, setRecentCrops] = useState([])
+  const [categories, setCategories] = useState([])
+  const [selectedCategory, setSelectedCategory] = useState('all')
+  const [allProducts, setAllProducts] = useState([])
+
+  // Load consumer data
+  const loadConsumerData = async () => {
+    try {
+      // Load current user data
+      const currentUser = await UserService.getCurrentUser()
+      if (currentUser) {
+        const formattedUser = UserService.formatUserData(currentUser)
+        setConsumerName(formattedUser.fullName || 'Consumer')
+      } else {
+        // Try to fetch fresh data from API
+        const userData = await UserService.fetchUserProfile()
+        if (userData) {
+          const formattedUser = UserService.formatUserData(userData)
+          setConsumerName(formattedUser.fullName || 'Consumer')
+        }
+      }
+    } catch (error) {
+      console.error('Error loading consumer data:', error)
+    }
+  }
+
+  // Load available products
+  const loadProducts = async () => {
+    try {
+      // Fetch products from vendors for consumer shopping
+      const response = await ProductService.getVendorProducts()
+      
+      if (response.success && response.data) {
+        const products = response.data
+        
+        const formattedCrops = products.map((product, index) => {
+          // Safely extract location - handle if it's an object or string
+          let locationText = 'India'
+          if (typeof product.location === 'string') {
+            locationText = product.location
+          } else if (product.location && typeof product.location === 'object') {
+            // If location is an object, try to extract meaningful text
+            locationText = product.location.district || product.location.city || product.location.state || 'India'
+          } else if (product.sellerId?.location) {
+            const sellerLoc = product.sellerId.location
+            if (typeof sellerLoc === 'string') {
+              locationText = sellerLoc
+            } else if (sellerLoc.district && sellerLoc.state) {
+              locationText = `${sellerLoc.district}, ${sellerLoc.state}`
+            }
+          }
+
+          // Safely extract image URL
+          let imageUrl = `https://via.placeholder.com/150x150/${['4CAF50', 'F44336', '9C27B0', 'FF9800'][index % 4]}/FFFFFF?text=${product.name || 'Product'}`
+          if (typeof product.imageUrl === 'string') {
+            imageUrl = product.imageUrl
+          } else if (typeof product.image === 'string') {
+            imageUrl = product.image
+          } else if (product.images && Array.isArray(product.images) && product.images.length > 0) {
+            imageUrl = product.images[0]
+          }
+
+          return {
+            id: product.id || product._id || `product_${index}`,
+            name: product.name || 'Product',
+            vendor: product.sellerId?.name || product.farmerName || product.seller?.name || product.sellerName || 'Local Farmer',
+            location: locationText,
+            price: product.price || 0,
+            originalPrice: product.originalPrice || (product.price ? (product.price * 1.2).toFixed(0) : 0),
+            rating: product.rating || (4 + Math.random()).toFixed(1),
+            reviews: product.reviews || Math.floor(Math.random() * 200) + 50,
+            badge: product.category === 'organic' ? 'Organic' : product.isFresh ? 'Fresh' : 'Premium',
+            image: imageUrl,
+            unit: product.unit || 'kg',
+            quantity: product.quantity || 100,
+            category: (product.category || 'vegetables').toLowerCase()
+          }
+        })
+        
+        setAllProducts(formattedCrops)
+        setRecentCrops(formattedCrops)
+        
+        // Calculate category counts from products
+        const categoryMap = {}
+        products.forEach(product => {
+          const cat = (product.category || 'others').toLowerCase()
+          categoryMap[cat] = (categoryMap[cat] || 0) + 1
+        })
+        
+        const categoriesData = [
+          { id: 'all', name: 'All', icon: 'Grid', color: '#2196F3', count: products.length },
+          { id: 'vegetables', name: 'Vegetables', icon: 'Leaf', color: '#4CAF50', count: categoryMap.vegetables || categoryMap.vegetable || 0 },
+          { id: 'fruits', name: 'Fruits', icon: 'Apple', color: '#F44336', count: categoryMap.fruits || categoryMap.fruit || 0 },
+          { id: 'grains', name: 'Grains', icon: 'Wheat', color: '#FF9800', count: categoryMap.grains || categoryMap.grain || 0 },
+          { id: 'pulses', name: 'Pulses', icon: 'Gem', color: '#9C27B0', count: categoryMap.pulses || categoryMap.pulse || 0 },
+          { id: 'spices', name: 'Spices', icon: 'Sparkles', color: '#E91E63', count: categoryMap.spices || categoryMap.spice || 0 },
+        ]
+        
+        setCategories(categoriesData)
+      }
+    } catch (error) {
+      console.error('Error loading products:', error)
+      
+      // Fallback to mock data
+      setCategories([
+        { id: 'all', name: 'All', icon: 'Grid', color: '#2196F3', count: 0 },
+        { id: 'vegetables', name: 'Vegetables', icon: 'Leaf', color: '#4CAF50', count: 0 },
+        { id: 'fruits', name: 'Fruits', icon: 'Apple', color: '#F44336', count: 0 },
+        { id: 'grains', name: 'Grains', icon: 'Wheat', color: '#FF9800', count: 0 },
+        { id: 'pulses', name: 'Pulses', icon: 'Gem', color: '#9C27B0', count: 0 },
+        { id: 'spices', name: 'Spices', icon: 'Sparkles', color: '#E91E63', count: 0 },
+      ])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Filter products by category
+  const filterProductsByCategory = (categoryId) => {
+    setSelectedCategory(categoryId)
+    if (categoryId === 'all') {
+      setRecentCrops(allProducts)
+    } else {
+      const filtered = allProducts.filter(product => product.category === categoryId)
+      setRecentCrops(filtered)
+    }
+  }
+
+  // Load cart count
+  const loadCartCount = async () => {
+    try {
+      const summary = await CartService.getCartSummary()
+      if (summary.success) {
+        setCartItemsCount(summary.totalItems)
+      }
+    } catch (error) {
+      console.error('Error loading cart count:', error)
+    }
+  }
+
+  // Load data on mount
+  useEffect(() => {
+    loadConsumerData()
+    loadProducts()
+    loadCartCount()
+  }, [])
+
+  // Reload cart count when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadCartCount()
+    }, [])
+  )
+
+  // Handle refresh
+  const onRefresh = async () => {
+    setRefreshing(true)
+    await Promise.all([loadConsumerData(), loadProducts(), loadCartCount()])
+    setRefreshing(false)
+  }
 
   // Categories data
-  const categories = [
+  const categoriesData = categories.length > 0 ? categories : [
     { name: 'Vegetables', icon: 'Leaf', color: '#4CAF50', count: 45 },
     { name: 'Fruits', icon: 'Apple', color: '#F44336', count: 32 },
     { name: 'Grains', icon: 'Wheat', color: '#FF9800', count: 28 },
@@ -149,8 +332,8 @@ const CDashboard = () => {
     { name: 'Dairy', icon: 'Milk', color: '#2196F3', count: 15 },
   ]
 
-  // Recent crops data
-  const recentCrops = [
+  // Recent crops data - now loaded from API
+  const recentCropsData = recentCrops.length > 0 ? recentCrops : [
     {
       id: 1,
       name: 'Fresh Potatoes',
@@ -175,30 +358,6 @@ const CDashboard = () => {
       badge: 'Organic',
       image: 'https://via.placeholder.com/150x150/F44336/FFFFFF?text=Tomato'
     },
-    {
-      id: 3,
-      name: 'Premium Onions',
-      vendor: 'Kumar Traders',
-      location: 'Rajasthan',
-      price: 20,
-      originalPrice: 25,
-      rating: 4.3,
-      reviews: 67,
-      badge: 'Premium',
-      image: 'https://via.placeholder.com/150x150/9C27B0/FFFFFF?text=Onion'
-    },
-    {
-      id: 4,
-      name: 'Fresh Carrots',
-      vendor: 'Sunny Farms',
-      location: 'Haryana',
-      price: 30,
-      originalPrice: 35,
-      rating: 4.6,
-      reviews: 112,
-      badge: 'Fresh',
-      image: 'https://via.placeholder.com/150x150/FF9800/FFFFFF?text=Carrot'
-    }
   ]
 
   // Quick actions
@@ -233,13 +392,37 @@ const CDashboard = () => {
     Alert.alert('Category', `Opening ${category.name} section...`)
   }
 
-  const handleAddToCart = (crop) => {
-    setCartItemsCount(prev => prev + 1)
-    Alert.alert('Added to Cart', `${crop.name} has been added to your cart!`)
+    const handleAddToCart = async (crop) => {
+    try {
+      // Extract product details from crop
+      const product = {
+        _id: crop.id,
+        id: crop.id,
+        name: crop.name,
+        price: crop.price,
+        unit: crop.unit || 'kg',
+        image: crop.image,
+        availableQuantity: crop.quantity || 100,
+        minimumOrderQuantity: crop.minimumOrderQuantity || 1,
+        sellerId: {
+          _id: crop.vendorId,
+          name: crop.vendor
+        }
+      }
+
+      const result = await CartService.addToCart(product, 1)
+      if (result.success) {
+        // Update cart count without showing modal
+        await loadCartCount()
+      }
+    } catch (error) {
+      console.error('Error adding to cart:', error)
+      Alert.alert('Error', 'Failed to add item to cart')
+    }
   }
 
   const handleViewDetails = (crop) => {
-    Alert.alert('Product Details', `Viewing details for ${crop.name}...`)
+    navigation.navigate('CProductDetail', { productId: crop.id })
   }
 
   const handleQuickAction = (action) => {
@@ -255,22 +438,34 @@ const CDashboard = () => {
   }
 
   const handleCart = () => {
-    Alert.alert('Cart', `You have ${cartItemsCount} items in cart`)
+    navigation.navigate('CCart')
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2196F3" />
+        <Text style={styles.loadingText}>Loading fresh produce...</Text>
+      </View>
+    )
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
       {/* Header */}
       <View style={styles.header}>
+        {/* Top Row - Welcome & Icons */}
         <View style={styles.headerTop}>
           <View style={styles.headerLeft}>
             <Text style={styles.welcomeText}>Welcome back,</Text>
-            <Text style={styles.userName}>Priya Sharma</Text>
+            <Text style={styles.userName}>{consumerName}</Text>
           </View>
           <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.headerButton} onPress={handleSearch}>
-              <Icon name="Search" size={24} color="white" />
-            </TouchableOpacity>
             <TouchableOpacity style={styles.headerButton} onPress={handleNotifications}>
               <Icon name="Bell" size={24} color="white" />
             </TouchableOpacity>
@@ -284,124 +479,135 @@ const CDashboard = () => {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <Icon name="Search" size={20} color="#999" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search Groceries, vegetables or fruits"
+            placeholderTextColor="#999"
+            onFocus={handleSearch}
+          />
+        </View>
       </View>
 
-      {/* Hero Section */}
-      <View style={styles.heroSection}>
-        <FlatList
-          ref={heroScrollRef}
-          data={heroSlides}
-          renderItem={({ item, index }) => (
-            <HeroSlide slide={item} isActive={index === currentSlide} />
-          )}
-          keyExtractor={(item, index) => index.toString()}
-          horizontal
-          pagingEnabled
+      {/* Category Filter */}
+      <View style={styles.categoryFilterSection}>
+        <Text style={styles.sectionTitle}>Categories</Text>
+        <ScrollView 
+          horizontal 
           showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={(event) => {
-            const slideIndex = Math.round(event.nativeEvent.contentOffset.x / width)
-            setCurrentSlide(slideIndex)
-          }}
-        />
-        
-        {/* Hero Indicators */}
-        <View style={styles.heroIndicators}>
-          {heroSlides.map((_, index) => (
-            <View
+          contentContainerStyle={styles.categoryFilterContainer}
+        >
+          {categoriesData.map((category, index) => (
+            <TouchableOpacity
               key={index}
               style={[
-                styles.heroIndicator,
-                index === currentSlide && styles.activeHeroIndicator
+                styles.categoryFilterChip,
+                selectedCategory === category.id && styles.categoryFilterChipActive
               ]}
-            />
+              onPress={() => filterProductsByCategory(category.id)}
+            >
+              <Icon 
+                name={category.icon} 
+                size={20} 
+                color={selectedCategory === category.id ? 'white' : category.color} 
+              />
+              <Text style={[
+                styles.categoryFilterText,
+                selectedCategory === category.id && styles.categoryFilterTextActive
+              ]}>
+                {category.name}
+              </Text>
+              {category.count > 0 && (
+                <View style={[
+                  styles.categoryCountBadge,
+                  selectedCategory === category.id && styles.categoryCountBadgeActive
+                ]}>
+                  <Text style={[
+                    styles.categoryCountText,
+                    selectedCategory === category.id && styles.categoryCountTextActive
+                  ]}>
+                    {category.count}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
       </View>
 
-      {/* Categories Section */}
-      <View style={styles.categoriesSection}>
+      {/* Products Section */}
+      <View style={styles.productsSection}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Shop by Category</Text>
-          <TouchableOpacity>
-            <Text style={styles.seeAllText}>See All</Text>
-          </TouchableOpacity>
+          <Text style={styles.sectionTitle}>
+            {selectedCategory === 'all' ? 'All Products' : `${categoriesData.find(c => c.id === selectedCategory)?.name || 'Products'}`}
+          </Text>
+          <Text style={styles.productCount}>{recentCropsData.length} items</Text>
         </View>
         
-        <View style={styles.categoriesGrid}>
-          {categories.map((category, index) => (
-            <CategoryCard
-              key={index}
-              category={category}
-              onPress={() => handleCategoryPress(category)}
-            />
+        <View style={styles.productsGrid}>
+          {recentCropsData.map((item) => (
+            <TouchableOpacity
+              key={item.id}
+              style={styles.productCard}
+              onPress={() => handleViewDetails(item)}
+            >
+              <View style={styles.productImageContainer}>
+                <Image 
+                  source={{ uri: item.image }} 
+                  style={styles.productImage}
+                  resizeMode="cover"
+                />
+                <TouchableOpacity 
+                  style={styles.favoriteIcon}
+                  onPress={(e) => {
+                    e.stopPropagation()
+                    Alert.alert('Favorite', `Added ${item.name} to favorites`)
+                  }}
+                >
+                  <Icon name="Heart" size={18} color="#666" />
+                </TouchableOpacity>
+                <View style={styles.productBadge}>
+                  <Text style={styles.productBadgeText}>{item.badge}</Text>
+                </View>
+              </View>
+              
+              <View style={styles.productDetails}>
+                <Text style={styles.productVendor} numberOfLines={1}>{item.vendor}</Text>
+                <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
+                
+                <View style={styles.productRating}>
+                  <Icon name="Star" size={14} color="#FFD700" />
+                  <Text style={styles.productRatingText}>{item.rating}</Text>
+                  <Text style={styles.productReviews}>({item.reviews})</Text>
+                </View>
+                
+                <View style={styles.productPriceRow}>
+                  <Text style={styles.productPrice}>₹{item.price}/{item.unit}</Text>
+                  <TouchableOpacity 
+                    style={styles.addToCartIcon}
+                    onPress={(e) => {
+                      e.stopPropagation()
+                      handleAddToCart(item)
+                    }}
+                  >
+                    <Icon name="ShoppingCart" size={18} color="white" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableOpacity>
           ))}
-        </View>
-      </View>
-
-      {/* Quick Actions */}
-      <View style={styles.quickActionsSection}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        <View style={styles.quickActionsContainer}>
-          {quickActions.map((action, index) => (
-            <QuickActionCard
-              key={index}
-              action={action}
-              onPress={() => handleQuickAction(action)}
-            />
-          ))}
-        </View>
-      </View>
-
-      {/* Recent Crops Section */}
-      <View style={styles.recentCropsSection}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Fresh Arrivals</Text>
-          <TouchableOpacity>
-            <Text style={styles.seeAllText}>See All</Text>
-          </TouchableOpacity>
         </View>
         
-        <FlatList
-          data={recentCrops}
-          renderItem={({ item }) => (
-            <RecentCropCard
-              crop={item}
-              onAddToCart={handleAddToCart}
-              onViewDetails={handleViewDetails}
-            />
-          )}
-          keyExtractor={(item) => item.id.toString()}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.recentCropsList}
-        />
-      </View>
-
-      {/* Featured Section */}
-      <View style={styles.featuredSection}>
-        <Text style={styles.sectionTitle}>Why Choose Krishika?</Text>
-        <View style={styles.featuresGrid}>
-          <View style={styles.featureCard}>
-            <Icon name="Shield" size={32} color="#4CAF50" />
-            <Text style={styles.featureTitle}>Quality Assured</Text>
-            <Text style={styles.featureDesc}>100% fresh and organic produce</Text>
+        {recentCropsData.length === 0 && (
+          <View style={styles.emptyState}>
+            <Icon name="Package" size={60} color="#CCC" />
+            <Text style={styles.emptyStateText}>No products found</Text>
+            <Text style={styles.emptyStateSubtext}>Try selecting a different category</Text>
           </View>
-          <View style={styles.featureCard}>
-            <Icon name="Truck" size={32} color="#2196F3" />
-            <Text style={styles.featureTitle}>Fast Delivery</Text>
-            <Text style={styles.featureDesc}>Direct from farm to your doorstep</Text>
-          </View>
-          <View style={styles.featureCard}>
-            <Icon name="DollarSign" size={32} color="#FF9800" />
-            <Text style={styles.featureTitle}>Fair Pricing</Text>
-            <Text style={styles.featureDesc}>No middlemen, transparent costs</Text>
-          </View>
-          <View style={styles.featureCard}>
-            <Icon name="Users" size={32} color="#9C27B0" />
-            <Text style={styles.featureTitle}>Support Farmers</Text>
-            <Text style={styles.featureDesc}>Direct support to local farmers</Text>
-          </View>
-        </View>
+        )}
       </View>
     </ScrollView>
   )
@@ -412,6 +618,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F5F5F5',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 10,
+  },
 
   // Header Styles
   header: {
@@ -419,24 +636,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 50,
     paddingBottom: 20,
+    borderBottomLeftRadius: 25,
+    borderBottomRightRadius: 25,
   },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    marginBottom: 20,
   },
   headerLeft: {
     flex: 1,
   },
   welcomeText: {
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: 'rgba(255, 255, 255, 0.9)',
     marginBottom: 4,
   },
   userName: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
     color: 'white',
+    letterSpacing: 0.5,
   },
   headerRight: {
     flexDirection: 'row',
@@ -464,94 +685,81 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
   },
-
-  // Hero Section
-  heroSection: {
-    height: 280,
-    position: 'relative',
-  },
-  heroSlide: {
-    width: width,
-    height: 280,
-    position: 'relative',
-  },
-  heroImage: {
-    width: '100%',
-    height: '100%',
-  },
-  heroOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'flex-end',
-  },
-  heroContent: {
-    padding: 25,
-  },
-  heroTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 10,
-    lineHeight: 30,
-  },
-  heroDescription: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.9)',
-    marginBottom: 20,
-    lineHeight: 22,
-  },
-  heroButton: {
-    backgroundColor: '#4CAF50',
+  searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 25,
-    alignSelf: 'flex-start',
-  },
-  heroButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: 'white',
-    marginRight: 8,
-  },
-  heroIndicators: {
-    position: 'absolute',
-    bottom: 15,
-    left: 25,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  heroIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-  },
-  activeHeroIndicator: {
     backgroundColor: 'white',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 15,
+    color: '#333',
   },
 
-  // Sections
-  categoriesSection: {
-    paddingHorizontal: 20,
-    paddingTop: 30,
+  // Category Filter
+  categoryFilterSection: {
+    paddingTop: 20,
+    paddingBottom: 10,
   },
-  quickActionsSection: {
+  categoryFilterContainer: {
     paddingHorizontal: 20,
-    paddingTop: 30,
+    gap: 10,
   },
-  recentCropsSection: {
-    paddingTop: 30,
+  categoryFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    gap: 8,
   },
-  featuredSection: {
+  categoryFilterChipActive: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+  },
+  categoryFilterText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  categoryFilterTextActive: {
+    color: 'white',
+  },
+  categoryCountBadge: {
+    backgroundColor: '#F0F0F0',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginLeft: 4,
+  },
+  categoryCountBadgeActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  categoryCountText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+  },
+  categoryCountTextActive: {
+    color: 'white',
+  },
+
+  // Products Section
+  productsSection: {
     paddingHorizontal: 20,
-    paddingTop: 30,
+    paddingTop: 20,
     paddingBottom: 30,
   },
   sectionHeader: {
@@ -565,241 +773,128 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
   },
-  seeAllText: {
+  productCount: {
     fontSize: 14,
-    color: '#2196F3',
-    fontWeight: '600',
+    color: '#666',
   },
 
-  // Categories
-  categoriesGrid: {
+  // Products Grid
+  productsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 15,
+    justifyContent: 'space-between',
   },
-  categoryCard: {
-    backgroundColor: 'white',
-    borderRadius: 15,
-    padding: 20,
-    width: (width - 55) / 2,
-    alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  categoryIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  categoryName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  categoryCount: {
-    fontSize: 14,
-    color: '#666',
-  },
-
-  // Quick Actions
-  quickActionsContainer: {
-    gap: 12,
-  },
-  quickActionCard: {
+  productCard: {
+    width: (width - 52) / 2,
     backgroundColor: 'white',
     borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
+    marginBottom: 16,
+    overflow: 'hidden',
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
-  quickActionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  quickActionContent: {
-    flex: 1,
-  },
-  quickActionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  quickActionDesc: {
-    fontSize: 14,
-    color: '#666',
-  },
-
-  // Recent Crops
-  recentCropsList: {
-    paddingLeft: 20,
-    gap: 15,
-  },
-  cropCard: {
-    backgroundColor: 'white',
-    borderRadius: 15,
-    padding: 16,
-    width: 280,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-  },
-  cropImageContainer: {
+  productImageContainer: {
     position: 'relative',
-    marginBottom: 12,
-  },
-  cropImage: {
     width: '100%',
-    height: 120,
-    borderRadius: 12,
+    height: 140,
   },
-  cropBadge: {
+  productImage: {
+    width: '100%',
+    height: '100%',
+  },
+  favoriteIcon: {
     position: 'absolute',
     top: 8,
     right: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  productBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
     backgroundColor: '#4CAF50',
-    borderRadius: 8,
+    borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  cropBadgeText: {
+  productBadgeText: {
     fontSize: 10,
     fontWeight: '600',
     color: 'white',
   },
-  cropInfo: {
-    flex: 1,
+  productDetails: {
+    padding: 12,
   },
-  cropName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+  productVendor: {
+    fontSize: 12,
+    color: '#999',
     marginBottom: 4,
   },
-  vendorName: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
+  productName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 6,
+    height: 38,
   },
-  cropLocation: {
+  productRating: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
   },
-  locationText: {
-    fontSize: 12,
-    color: '#666',
+  productRatingText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#333',
     marginLeft: 4,
   },
-  cropPricing: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
+  productReviews: {
+    fontSize: 12,
+    color: '#999',
+    marginLeft: 2,
   },
-  cropPrice: {
-    fontSize: 18,
+  productPriceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  productPrice: {
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#4CAF50',
-    marginRight: 8,
   },
-  cropOriginalPrice: {
-    fontSize: 14,
-    color: '#999',
-    textDecorationLine: 'line-through',
-  },
-  cropRating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  ratingText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginLeft: 4,
-    marginRight: 4,
-  },
-  reviewCount: {
-    fontSize: 12,
-    color: '#666',
-  },
-  cropActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  addToCartButton: {
+  addToCartIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#4CAF50',
-    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    flex: 1,
-    marginRight: 8,
-  },
-  addToCartText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'white',
-    marginLeft: 6,
-  },
-  viewDetailsButton: {
-    backgroundColor: '#E3F2FD',
-    borderRadius: 8,
-    padding: 10,
   },
 
-  // Features
-  featuresGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 15,
-    marginTop: 20,
-  },
-  featureCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 20,
-    width: (width - 55) / 2,
+  // Empty State
+  emptyState: {
     alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    paddingVertical: 40,
   },
-  featureTitle: {
-    fontSize: 16,
+  emptyStateText: {
+    fontSize: 18,
     fontWeight: '600',
-    color: '#333',
-    marginTop: 12,
-    marginBottom: 8,
-    textAlign: 'center',
+    color: '#999',
+    marginTop: 16,
   },
-  featureDesc: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 18,
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#BBB',
+    marginTop: 4,
   },
 })
 

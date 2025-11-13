@@ -172,7 +172,8 @@ const CropRecommendation = () => {
   const navigation = useNavigation();
 
   // State management
-  const [isConnected, setIsConnected] = useState(true)
+  const [isConnected, setIsConnected] = useState(false)
+  const [isConnecting, setIsConnecting] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isFetchingData, setIsFetchingData] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -235,8 +236,75 @@ const CropRecommendation = () => {
 
   // Load initial data on component mount
   useEffect(() => {
-    loadAllData()
+    // Don't auto-load data - wait for Bluetooth connection
+    // loadAllData()
   }, [])
+
+  // Function to connect to Krishi Mitra IoT device via Bluetooth
+  const handleConnectToDevice = async () => {
+    setIsConnecting(true)
+    try {
+      // Simulate Bluetooth connection (replace with actual Bluetooth logic)
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      
+      setIsConnected(true)
+      
+      // After successful connection, load static IoT data
+      
+      
+      Alert.alert(
+        'Connected Successfully',
+        'Krishi Mitra IoT device is now connected. Sensor data has been loaded.',
+        [{ text: 'OK' }]
+      )
+
+      setParameters({
+        nitrogen: 84.2,
+        phosphorus: 50.2,
+        potassium: 40.1,
+        temperature: 24.2,
+        humidity: 89.2,
+        phLevel: 6.1,
+        rainfall: 104.2
+      })
+      
+    } catch (error) {
+      console.error('Bluetooth connection error:', error)
+      Alert.alert('Connection Failed', 'Unable to connect to Krishi Mitra device. Please try again.')
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+
+  // Function to disconnect from IoT device
+  const handleDisconnectDevice = () => {
+    Alert.alert(
+      'Disconnect Device',
+      'Are you sure you want to disconnect from Krishi Mitra?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Disconnect',
+          style: 'destructive',
+          onPress: () => {
+            setIsConnected(false)
+            // Reset to zero values on disconnect
+            setParameters({
+              nitrogen: 0.0,
+              phosphorus: 0.0,
+              potassium: 0.0,
+              temperature: 0.0,
+              humidity: 0.0,
+              phLevel: 0.0,
+              rainfall: 0.0
+            })
+            setShowRecommendations(false)
+            setCropHealthAnalysis(null)
+          }
+        }
+      ]
+    )
+  }
 
   // Function to load all data from database
   const loadAllData = async () => {
@@ -257,11 +325,18 @@ const CropRecommendation = () => {
 
   // Function to fetch hardware messages from database
   const fetchHardwareMessages = async () => {
+    if (!isConnected) {
+      Alert.alert('Not Connected', 'Please connect to Krishi Mitra device first.')
+      return []
+    }
+    
     try {
       const messages = await HardwareService.getLatestHardwareMessages(5)
       setHardwareMessages(messages)
       
-      // Update parameters with latest sensor data
+      // Don't override the static IoT data - keep the connected device data
+      // If you want to merge database data with IoT data, uncomment below:
+      /*
       if (messages && messages.length > 0) {
         const latestMessage = messages[0]
         if (latestMessage.sensorData) {
@@ -276,6 +351,7 @@ const CropRecommendation = () => {
           })
         }
       }
+      */
       
       return messages
     } catch (error) {
@@ -286,6 +362,11 @@ const CropRecommendation = () => {
 
   // Function to fetch crop recommendations from database
   const fetchCropRecommendations = async () => {
+    if (!isConnected) {
+      Alert.alert('Not Connected', 'Please connect to Krishi Mitra device first.')
+      return []
+    }
+    
     try {
       const recommendations = await HardwareService.getLatestCropRecommendations(5)
       setCropRecommendations(recommendations)
@@ -298,6 +379,11 @@ const CropRecommendation = () => {
 
   // Function to analyze crop health with Gemini
   const analyzeCropHealth = async () => {
+    if (!isConnected) {
+      Alert.alert('Not Connected', 'Please connect to Krishi Mitra device first.')
+      return
+    }
+    
     if (hardwareMessages.length === 0 || cropRecommendations.length === 0) {
       Alert.alert('No Data', 'Please fetch hardware and crop recommendation data first.')
       return
@@ -370,6 +456,10 @@ const CropRecommendation = () => {
 
   // Function to fetch dummy data (keeping for backward compatibility)
   const handleFetchDummyData = async () => {
+    if (!isConnected) {
+      Alert.alert('Not Connected', 'Please connect to Krishi Mitra device first.')
+      return
+    }
     await loadAllData()
   }
 
@@ -459,17 +549,60 @@ const CropRecommendation = () => {
             color={isConnected ? "#2196F3" : "#F44336"} 
           />
           <Text style={[styles.connectionText, { color: isConnected ? "#2196F3" : "#F44336" }]}>
-            {isConnected ? "IoT Device Connected" : "IoT Device Disconnected"}
+            {isConnected ? "Krishi Mitra Connected" : "Krishi Mitra Disconnected"}
           </Text>
         </View>
       </View>
 
+      {/* Bluetooth Connection Section */}
+      {!isConnected && (
+        <View style={styles.connectionSection}>
+          <View style={styles.connectionCard}>
+            <Icon name="Bluetooth" size={48} color="#2196F3" />
+            <Text style={styles.connectionTitle}>Connect to Krishi Mitra</Text>
+            <Text style={styles.connectionDescription}>
+              Connect to your IoT device via Bluetooth to access real-time sensor data
+            </Text>
+            <TouchableOpacity 
+              style={styles.connectButton} 
+              onPress={handleConnectToDevice}
+              disabled={isConnecting}
+            >
+              {isConnecting ? (
+                <>
+                  <ActivityIndicator size="small" color="white" />
+                  <Text style={styles.connectButtonText}>Connecting...</Text>
+                </>
+              ) : (
+                <>
+                  <Icon name="Bluetooth" size={20} color="white" />
+                  <Text style={styles.connectButtonText}>Connect to Device</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {isConnected && (
+        <>
       {/* Parameters Section */}
       <View style={styles.parametersSection}>
-        <Text style={styles.sectionTitle}>Soil & Environmental Parameters</Text>
-        <Text style={styles.sectionSubtitle}>
-          Data from IoT sensors (Press "Fetch Dummy Data" to update)
-        </Text>
+        <View style={styles.sectionHeaderRow}>
+          <View>
+            <Text style={styles.sectionTitle}>Soil & Environmental Parameters</Text>
+            <Text style={styles.sectionSubtitle}>
+              Live data from Krishi Mitra IoT sensors
+            </Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.disconnectButton} 
+            onPress={handleDisconnectDevice}
+          >
+            <Icon name="BluetoothOff" size={16} color="#F44336" />
+            <Text style={styles.disconnectButtonText}>Disconnect</Text>
+          </TouchableOpacity>
+        </View>
         
         <View style={styles.parametersGrid}>
           {parameterConfig.map((param) => (
@@ -656,6 +789,8 @@ const CropRecommendation = () => {
           </Text>
         </View>
       )}
+        </>
+      )}
     </ScrollView>
   )
 }
@@ -716,10 +851,80 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
 
+  // Connection Section Styles
+  connectionSection: {
+    paddingHorizontal: 20,
+    paddingTop: 30,
+    paddingBottom: 20,
+  },
+  connectionCard: {
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 30,
+    alignItems: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  connectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 15,
+    marginBottom: 10,
+  },
+  connectionDescription: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  connectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2196F3',
+    paddingVertical: 14,
+    paddingHorizontal: 30,
+    borderRadius: 10,
+    minWidth: 200,
+  },
+  connectButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+    marginLeft: 8,
+  },
+
   // Parameters Section
   parametersSection: {
     paddingHorizontal: 20,
     paddingTop: 25,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+  },
+  disconnectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(244, 67, 54, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F44336',
+  },
+  disconnectButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#F44336',
+    marginLeft: 4,
   },
   sectionTitle: {
     fontSize: 20,

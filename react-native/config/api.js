@@ -4,7 +4,7 @@
 const __DEV__ = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
 
 // Your local machine IP address (replace with your actual IP)
-const LOCAL_IP = '10.224.219.103';
+const LOCAL_IP = '10.25.158.6';
 
 // API Configuration
 const API_CONFIG = {
@@ -20,6 +20,7 @@ const API_CONFIG = {
     REGISTER: '/auth/register',
     
     // Users
+    USERS: '/users',
     USERS_SEARCH: '/users/search/query',
     
     // Products

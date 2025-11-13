@@ -60,6 +60,88 @@ class OrdersService {
         }
     }
 
+    // Update order status (for farmers/sellers)
+    static async updateOrderStatus(orderId, newStatus) {
+        try {
+            const token = await AsyncStorage.getItem('userToken');
+            const headers = {
+                'Content-Type': 'application/json',
+            };
+            
+            if (token) {
+                headers.Authorization = `Bearer ${token}`;
+            }
+
+            const endpoint = `/orders/${orderId}/status`;
+
+            console.log('=== Update Order Status API Call ===');
+            console.log('Endpoint:', endpoint);
+            console.log('Order ID:', orderId);
+            console.log('New Status:', newStatus);
+            console.log('Has Token:', !!token);
+
+            const response = await apiRequest(endpoint, {
+                method: 'PATCH',
+                headers,
+                body: JSON.stringify({ status: newStatus }),
+            });
+
+            console.log('API Response:', JSON.stringify(response, null, 2));
+            return response;
+        } catch (error) {
+            console.error('=== Error updating order status ===');
+            console.error('Error:', error);
+            console.error('Error message:', error.message);
+            console.error('Error stack:', error.stack);
+            
+            if (error.response) {
+                console.error('Error response:', error.response);
+            }
+            
+            throw new Error(error.message || 'Failed to update order status. Please check your connection.');
+        }
+    }
+
+    // Cancel order (for farmers/sellers)
+    static async cancelOrder(orderId, reason = '') {
+        try {
+            const token = await AsyncStorage.getItem('userToken');
+            const headers = {
+                'Content-Type': 'application/json',
+            };
+            
+            if (token) {
+                headers.Authorization = `Bearer ${token}`;
+            }
+
+            const endpoint = `/orders/${orderId}/cancel`;
+
+            console.log('=== Cancel Order API Call ===');
+            console.log('Endpoint:', endpoint);
+            console.log('Order ID:', orderId);
+            console.log('Reason:', reason);
+            console.log('Has Token:', !!token);
+
+            const response = await apiRequest(endpoint, {
+                method: 'PATCH',
+                headers,
+                body: JSON.stringify({ reason }),
+            });
+
+            console.log('Cancel API Response:', JSON.stringify(response, null, 2));
+            return response;
+        } catch (error) {
+            console.error('=== Error cancelling order ===');
+            console.error('Error:', error);
+            console.error('Error message:', error.message);
+            
+            return {
+                success: false,
+                message: error.message || 'Failed to cancel order. Please check your connection.'
+            };
+        }
+    }
+
     // Calculate active orders (pending + confirmed + in_transit)
     static calculateActiveOrders(orders) {
         if (!orders || !Array.isArray(orders)) return 0;
@@ -122,8 +204,11 @@ class OrdersService {
                 return '#FF9800'; // Orange
             case 'confirmed':
                 return '#2196F3'; // Blue
-            case 'in_transit':
+            case 'processing':
                 return '#9C27B0'; // Purple
+            case 'in_transit':
+            case 'shipped':
+                return '#3F51B5'; // Indigo
             case 'delivered':
                 return '#4CAF50'; // Green
             case 'cancelled':
@@ -140,8 +225,12 @@ class OrdersService {
                 return 'Pending';
             case 'confirmed':
                 return 'Confirmed';
+            case 'processing':
+                return 'Processing';
             case 'in_transit':
                 return 'In Transit';
+            case 'shipped':
+                return 'Shipped';
             case 'delivered':
                 return 'Delivered';
             case 'cancelled':
@@ -153,7 +242,7 @@ class OrdersService {
 
     // Check if order is active (for farmer dashboard)
     static isActiveOrder(order) {
-        const activeStatuses = ['pending', 'confirmed', 'in_transit'];
+        const activeStatuses = ['pending', 'confirmed', 'processing', 'in_transit', 'shipped'];
         return activeStatuses.includes(order.status?.toLowerCase());
     }
 
@@ -233,6 +322,8 @@ export default OrdersService;
 // Helper functions for easy import
 export const getUserOrders = OrdersService.getUserOrders.bind(OrdersService);
 export const getOrderStats = OrdersService.getOrderStats.bind(OrdersService);
+export const updateOrderStatus = OrdersService.updateOrderStatus.bind(OrdersService);
+export const cancelOrder = OrdersService.cancelOrder.bind(OrdersService);
 export const calculateActiveOrders = OrdersService.calculateActiveOrders.bind(OrdersService);
 export const calculateTotalRevenue = OrdersService.calculateTotalRevenue.bind(OrdersService);
 export const formatCurrency = OrdersService.formatCurrency.bind(OrdersService);

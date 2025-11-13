@@ -8,7 +8,10 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  RefreshControl
+  RefreshControl,
+  Modal,
+  Alert,
+  TextInput
 } from 'react-native'
 import Svg, { Polyline, Circle } from 'react-native-svg'
 import Icon from '../Icon'
@@ -16,6 +19,390 @@ import OrdersService from '../services/ordersService'
 import { useNavigation } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window')
+
+// Status Badge Component (from AllOrders)
+const StatusBadge = ({ status, originalStatus }) => {
+  const statusColor = OrdersService.getStatusColor(originalStatus || status);
+  
+  return (
+    <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
+      <Text style={[styles.statusText, { color: statusColor }]}>
+        {status}
+      </Text>
+    </View>
+  );
+};
+
+// Order Detail Modal Component (from AllOrders)
+const OrderDetailModal = ({ visible, order, onClose, onStatusUpdate, onCancelOrder }) => {
+  const [updating, setUpdating] = useState(false);
+
+  if (!order) return null;
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-IN', { 
+      day: 'numeric', 
+      month: 'short', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getStatusSteps = (status) => {
+    const allSteps = ['pending', 'confirmed', 'processing', 'shipped', 'delivered'];
+    const currentIndex = allSteps.indexOf(status?.toLowerCase());
+    
+    return allSteps.map((step, index) => ({
+      label: step.charAt(0).toUpperCase() + step.slice(1),
+      completed: index < currentIndex,
+      active: index === currentIndex
+    }));
+  };
+
+  const handleStatusUpdate = async (newStatus) => {
+    console.log('=== Status Update Debug ===');
+    console.log('Order ID:', order.id);
+    console.log('New Status:', newStatus);
+    
+    setUpdating(true);
+    try {
+      const response = await OrdersService.updateOrderStatus(order.id, newStatus);
+      console.log('Status update response:', JSON.stringify(response, null, 2));
+      
+      if (response.success) {
+        Alert.alert('Success', 'Order status updated successfully');
+        onStatusUpdate();
+        onClose();
+      } else {
+        const errorMessage = response.message || 'Failed to update order status';
+        const errorDetails = response.errors ? JSON.stringify(response.errors) : '';
+        console.error('Error updating order status:', errorMessage, errorDetails);
+        Alert.alert('Error', `${errorMessage}\n${errorDetails}`);
+      }
+    } catch (error) {
+      console.error('Exception during status update:', error);
+      Alert.alert('Error', error.message || 'Failed to update order status');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const getNextStatus = (currentStatus) => {
+    const statusFlow = {
+      'pending': 'confirmed',
+      'confirmed': 'processing',
+      'processing': 'shipped',
+      'shipped': 'delivered'
+    };
+    return statusFlow[currentStatus?.toLowerCase()];
+  };
+
+  const canUpdateStatus = (currentStatus) => {
+    return ['pending', 'confirmed', 'processing', 'shipped'].includes(currentStatus?.toLowerCase());
+  };
+
+  const canCancelOrder = (currentStatus) => {
+    const status = currentStatus?.toLowerCase();
+    return status === 'pending' || status === 'confirmed' || status === 'processing';
+  };
+
+  const statusSteps = getStatusSteps(order.originalStatus || order.status);
+
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.detailModalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Order Details</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Icon name="X" size={24} color="#666" />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.modalContent}>
+            {/* Order Summary */}
+            <View style={styles.orderSummarySection}>
+              <Text style={styles.sectionTitleModal}>Order Summary</Text>
+              <View style={styles.summaryCard}>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Order ID:</Text>
+                  <Text style={styles.summaryValue}>#{order.id?.substring(0, 12) || 'N/A'}</Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Date:</Text>
+                  <Text style={styles.summaryValue}>{formatDate(order.date)}</Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Status:</Text>
+                  <StatusBadge status={order.status} originalStatus={order.originalStatus} />
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Total Amount:</Text>
+                  <Text style={[styles.summaryValue, styles.amountText]}>
+                    {OrdersService.formatCurrency(order.amount)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Product Details */}
+            <View style={styles.productDetailsSection}>
+              <Text style={styles.sectionTitleModal}>Product Details</Text>
+              <View style={styles.productCard}>
+                <View style={styles.productInfo}>
+                  <Text style={styles.productName}>{order.crop}</Text>
+                  <Text style={styles.productQuantity}>{order.quantity} kg</Text>
+                </View>
+                <Text style={styles.productPrice}>
+                  ₹{Math.round(order.amount / order.quantity)} per kg
+                </Text>
+              </View>
+            </View>
+
+            {/* Customer Details */}
+            <View style={styles.customerDetailsSection}>
+              <Text style={styles.sectionTitleModal}>Customer Details</Text>
+              <View style={styles.customerCard}>
+                <View style={styles.customerInfo}>
+                  <Icon name="User" size={20} color="#4CAF50" />
+                  <View style={styles.customerText}>
+                    <Text style={styles.customerName}>{order.vendor}</Text>
+                    <Text style={styles.customerType}>Vendor/Retailer</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Order Progress */}
+            <View style={styles.statusProgressSection}>
+              <Text style={styles.sectionTitleModal}>Order Progress</Text>
+              <View style={styles.progressContainer}>
+                {statusSteps.map((step, index) => (
+                  <View key={index} style={styles.progressStep}>
+                    <View style={styles.progressStepIndicator}>
+                      <View style={[
+                        styles.progressDot,
+                        step.completed && styles.progressDotCompleted,
+                        step.active && styles.progressDotActive
+                      ]}>
+                        {step.completed && (
+                          <Icon name="Check" size={12} color="white" />
+                        )}
+                      </View>
+                      {index < statusSteps.length - 1 && (
+                        <View style={[
+                          styles.progressLine,
+                          step.completed && styles.progressLineCompleted
+                        ]} />
+                      )}
+                    </View>
+                    <Text style={[
+                      styles.progressLabel,
+                      step.completed && styles.progressLabelCompleted,
+                      step.active && styles.progressLabelActive
+                    ]}>
+                      {step.label}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            {/* Status Update Actions */}
+            {canUpdateStatus(order.originalStatus || order.status) && (
+              <View style={styles.statusActionsSection}>
+                <Text style={styles.sectionTitleModal}>Update Status</Text>
+                <View style={styles.statusActionsContainer}>
+                  {order.originalStatus?.toLowerCase() === 'pending' && (
+                    <>
+                      <TouchableOpacity
+                        style={[styles.statusActionButton, styles.confirmButton]}
+                        onPress={() => handleStatusUpdate('confirmed')}
+                        disabled={updating}
+                      >
+                        {updating ? (
+                          <ActivityIndicator size="small" color="white" />
+                        ) : (
+                          <>
+                            <Icon name="CheckCircle" size={20} color="white" />
+                            <Text style={styles.statusActionButtonText}>Confirm Order</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.statusActionButton, styles.rejectButton]}
+                        onPress={() => handleStatusUpdate('cancelled')}
+                        disabled={updating}
+                      >
+                        <Icon name="XCircle" size={20} color="white" />
+                        <Text style={styles.statusActionButtonText}>Reject Order</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                  
+                  {order.originalStatus?.toLowerCase() === 'confirmed' && (
+                    <TouchableOpacity
+                      style={[styles.statusActionButton, styles.processingButton]}
+                      onPress={() => handleStatusUpdate('processing')}
+                      disabled={updating}
+                    >
+                      {updating ? (
+                        <ActivityIndicator size="small" color="white" />
+                      ) : (
+                        <>
+                          <Icon name="Loader" size={20} color="white" />
+                          <Text style={styles.statusActionButtonText}>Start Processing</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                  
+                  {order.originalStatus?.toLowerCase() === 'processing' && (
+                    <TouchableOpacity
+                      style={[styles.statusActionButton, styles.shippedButton]}
+                      onPress={() => handleStatusUpdate('shipped')}
+                      disabled={updating}
+                    >
+                      {updating ? (
+                        <ActivityIndicator size="small" color="white" />
+                      ) : (
+                        <>
+                          <Icon name="Truck" size={20} color="white" />
+                          <Text style={styles.statusActionButtonText}>Mark as Shipped</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                  
+                  {order.originalStatus?.toLowerCase() === 'shipped' && (
+                    <TouchableOpacity
+                      style={[styles.statusActionButton, styles.deliveredButton]}
+                      onPress={() => handleStatusUpdate('delivered')}
+                      disabled={updating}
+                    >
+                      {updating ? (
+                        <ActivityIndicator size="small" color="white" />
+                      ) : (
+                        <>
+                          <Icon name="Package" size={20} color="white" />
+                          <Text style={styles.statusActionButtonText}>Mark as Delivered</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            )}
+
+            {/* Cancel Order Button */}
+            {canCancelOrder(order.originalStatus || order.status) && (
+              <View style={styles.cancelOrderSection}>
+                <TouchableOpacity
+                  style={styles.cancelOrderButton}
+                  onPress={() => onCancelOrder(order)}
+                  disabled={updating}
+                >
+                  <Icon name="XCircle" size={20} color="#F44336" />
+                  <Text style={styles.cancelOrderButtonText}>Cancel Order</Text>
+                </TouchableOpacity>
+                <Text style={styles.cancelOrderHint}>
+                  You can cancel this order while it's in pending, confirmed, or processing status
+                </Text>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const CancelOrderModal = ({ visible, order, onClose, onConfirm }) => {
+  const [reason, setReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+
+  const handleCancel = async () => {
+    if (!reason.trim()) {
+      Alert.alert('Required', 'Please provide a reason for cancellation');
+      return;
+    }
+
+    setCancelling(true);
+    await onConfirm(reason);
+    setCancelling(false);
+    setReason('');
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.cancelModalOverlay}>
+        <View style={styles.cancelModalContainer}>
+          <View style={styles.cancelModalHeader}>
+            <Text style={styles.cancelModalTitle}>Cancel Order</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Icon name="X" size={24} color="#666" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.cancelModalBody}>
+            <Text style={styles.cancelModalOrderInfo}>
+              Order #{order?.id?.substring(0, 12) || 'N/A'}
+            </Text>
+            <Text style={styles.cancelModalWarning}>
+              Are you sure you want to cancel this order? This action cannot be undone and may affect your customer relationship.
+            </Text>
+
+            <Text style={styles.cancelInputLabel}>Reason for cancellation *</Text>
+            <TextInput
+              style={styles.cancelReasonInput}
+              placeholder="e.g., Out of stock, Unable to fulfill order..."
+              placeholderTextColor="#999"
+              value={reason}
+              onChangeText={setReason}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </View>
+
+          <View style={styles.cancelModalFooter}>
+            <TouchableOpacity
+              style={[styles.cancelModalButton, styles.cancelModalKeepButton]}
+              onPress={onClose}
+              disabled={cancelling}
+            >
+              <Text style={styles.cancelModalKeepButtonText}>Keep Order</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.cancelModalButton, styles.cancelModalConfirmButton]}
+              onPress={handleCancel}
+              disabled={cancelling}
+            >
+              {cancelling ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Text style={styles.cancelModalConfirmButtonText}>Cancel Order</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
 
 const RevenueCard = ({ title, amount, change, icon, color }) => {
   const isPositive = change > 0
@@ -216,6 +603,12 @@ const OrdersDashboard = () => {
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [metrics, setMetrics] = useState({});
+  
+  // Modal state
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [orderToCancel, setOrderToCancel] = useState(null);
 
   // Load orders data from database
   const loadOrdersData = async () => {
@@ -248,6 +641,51 @@ const OrdersDashboard = () => {
     setRefreshing(true);
     await loadOrdersData();
     setRefreshing(false);
+  };
+
+  // Handle order press
+  const handleOrderPress = (order) => {
+    setSelectedOrder(order);
+    setShowDetailModal(true);
+  };
+
+  // Handle status update
+  const handleStatusUpdate = async () => {
+    setShowDetailModal(false);
+    await loadOrdersData();
+  };
+
+  // Handle cancel order
+  const handleCancelOrder = (order) => {
+    const status = order.originalStatus?.toLowerCase();
+    if (status === 'pending' || status === 'confirmed' || status === 'processing') {
+      setOrderToCancel(order);
+      setShowDetailModal(false);
+      setShowCancelModal(true);
+    } else {
+      Alert.alert('Cannot Cancel', 'This order cannot be cancelled at its current status.');
+    }
+  };
+
+  // Confirm cancel order
+  const confirmCancelOrder = async (reason) => {
+    if (!orderToCancel) return;
+
+    try {
+      const response = await OrdersService.updateOrderStatus(orderToCancel.id, 'cancelled');
+      
+      if (response.success) {
+        Alert.alert('Success', 'Order has been cancelled successfully');
+        setShowCancelModal(false);
+        setOrderToCancel(null);
+        await loadOrdersData();
+      } else {
+        Alert.alert('Error', 'Failed to cancel order. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error cancelling order:', error);
+      Alert.alert('Error', 'Failed to cancel order. Please try again.');
+    }
   };
 
   useEffect(() => {
@@ -537,7 +975,7 @@ const OrdersDashboard = () => {
         {recentOrders.length > 0 ? (
           <FlatList
             data={recentOrders}
-            renderItem={({ item }) => <OrderCard order={item} />}
+            renderItem={({ item }) => <OrderCard order={item} onPress={() => handleOrderPress(item)} />}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.ordersList}
@@ -551,6 +989,26 @@ const OrdersDashboard = () => {
           </View>
         )}
       </View>
+      
+      {/* Order Detail Modal */}
+      <OrderDetailModal
+        visible={showDetailModal}
+        order={selectedOrder}
+        onClose={() => setShowDetailModal(false)}
+        onStatusUpdate={handleStatusUpdate}
+        onCancelOrder={handleCancelOrder}
+      />
+
+      {/* Cancel Order Modal */}
+      <CancelOrderModal
+        visible={showCancelModal}
+        order={orderToCancel}
+        onClose={() => {
+          setShowCancelModal(false);
+          setOrderToCancel(null);
+        }}
+        onConfirm={confirmCancelOrder}
+      />
     </ScrollView>
   )
 }
@@ -1002,6 +1460,337 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
     lineHeight: 20,
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailModalContainer: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    width: '90%',
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
+  },
+  modalContent: {
+    padding: 20,
+  },
+  sectionTitleModal: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+  },
+  orderSummarySection: {
+    marginBottom: 24,
+  },
+  summaryCard: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E9ECEF',
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  summaryValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  amountText: {
+    color: '#4CAF50',
+    fontSize: 16,
+  },
+  productDetailsSection: {
+    marginBottom: 24,
+  },
+  productCard: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  productInfo: {
+    flex: 1,
+  },
+  productName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  productQuantity: {
+    fontSize: 14,
+    color: '#666',
+  },
+  productPrice: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2196F3',
+  },
+  customerDetailsSection: {
+    marginBottom: 24,
+  },
+  customerCard: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+  },
+  customerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  customerText: {
+    marginLeft: 12,
+  },
+  customerName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 2,
+  },
+  customerType: {
+    fontSize: 14,
+    color: '#666',
+  },
+  statusProgressSection: {
+    marginBottom: 20,
+  },
+  progressContainer: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+  },
+  progressStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  progressStepIndicator: {
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  progressDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#E9ECEF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  progressDotCompleted: {
+    backgroundColor: '#4CAF50',
+  },
+  progressDotActive: {
+    backgroundColor: '#2196F3',
+  },
+  progressLine: {
+    width: 2,
+    height: 20,
+    backgroundColor: '#E9ECEF',
+  },
+  progressLineCompleted: {
+    backgroundColor: '#4CAF50',
+  },
+  progressLabel: {
+    fontSize: 14,
+    color: '#666',
+    flex: 1,
+  },
+  progressLabelCompleted: {
+    color: '#4CAF50',
+    fontWeight: '600',
+  },
+  progressLabelActive: {
+    color: '#2196F3',
+    fontWeight: '600',
+  },
+  statusActionsSection: {
+    marginBottom: 20,
+  },
+  statusActionsContainer: {
+    gap: 10,
+  },
+  statusActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  statusActionButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 10,
+  },
+  confirmButton: {
+    backgroundColor: '#4CAF50',
+  },
+  rejectButton: {
+    backgroundColor: '#F44336',
+  },
+  processingButton: {
+    backgroundColor: '#9C27B0',
+  },
+  shippedButton: {
+    backgroundColor: '#3F51B5',
+  },
+  deliveredButton: {
+    backgroundColor: '#4CAF50',
+  },
+
+  // Cancel Order Section
+  cancelOrderSection: {
+    marginTop: 20,
+    marginBottom: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  cancelOrderButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: '#FFF',
+    borderWidth: 2,
+    borderColor: '#F44336',
+  },
+  cancelOrderButtonText: {
+    color: '#F44336',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 10,
+  },
+  cancelOrderHint: {
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'center',
+    marginTop: 10,
+    lineHeight: 16,
+  },
+
+  // Cancel Modal Styles
+  cancelModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cancelModalContainer: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    width: '90%',
+    maxWidth: 400,
+  },
+  cancelModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  cancelModalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
+  },
+  cancelModalBody: {
+    padding: 20,
+  },
+  cancelModalOrderInfo: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+  },
+  cancelModalWarning: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  cancelInputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  cancelReasonInput: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 14,
+    color: '#333',
+    minHeight: 100,
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+  },
+  cancelModalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+    gap: 10,
+  },
+  cancelModalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelModalKeepButton: {
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+  },
+  cancelModalKeepButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+  },
+  cancelModalConfirmButton: {
+    backgroundColor: '#F44336',
+  },
+  cancelModalConfirmButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
   },
 })
 

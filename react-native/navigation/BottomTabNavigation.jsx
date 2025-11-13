@@ -7,6 +7,7 @@ import { useRoute } from '@react-navigation/native';
 import VDashboard from '../vendor/VDashboard';
 import VBuyCrops from '../vendor/VBuyCrops';
 import VSellCrops from '../vendor/VSellCrops';
+import VOrders from '../vendor/VOrders';
 import VProfile from '../vendor/VProfile';
 import CDashboard from '../consumer/CDashboard';
 import CBuy from '../consumer/CBuy';
@@ -26,6 +27,7 @@ const WrappedProfile = () => <ScreenWrapper><Profile /></ScreenWrapper>;
 const WrappedVDashboard = () => <ScreenWrapper><VDashboard /></ScreenWrapper>;
 const WrappedVBuyCrops = () => <ScreenWrapper><VBuyCrops /></ScreenWrapper>;
 const WrappedVSellCrops = () => <ScreenWrapper><VSellCrops /></ScreenWrapper>;
+const WrappedVOrders = () => <ScreenWrapper><VOrders /></ScreenWrapper>;
 const WrappedVProfile = () => <ScreenWrapper><VProfile /></ScreenWrapper>;
 
 const WrappedCDashboard = () => <ScreenWrapper><CDashboard /></ScreenWrapper>;
@@ -125,6 +127,15 @@ else if (role === 'Vendor') {
         options={{
           tabBarIcon: ({ color, size }) => (
             <Icon name="ShoppingCart" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name="My Orders" 
+        component={WrappedVOrders}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="Package" color={color} size={size} />
           ),
         }}
       />

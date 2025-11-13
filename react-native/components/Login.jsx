@@ -1,5 +1,5 @@
 import React from 'react'
-import { View, Text, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal } from 'react-native'
+import { View, Text, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal, ScrollView } from 'react-native'
 import RoleCard from './RoleCard';
 import CheckBox from 'react-native-check-box'
 import Icon from '../Icon';
@@ -187,7 +187,7 @@ const Login = () => {
     };
 
     return (
-        <View style={{ padding: 20 }}>
+        <ScrollView style={{ padding: 20 }}>
             <Text style={{ fontSize: 18, fontWeight: '600', color: '#333', marginBottom: 8 }}>
                 I am a
             </Text>
@@ -532,7 +532,7 @@ const Login = () => {
                     </View>
                 </View>
             </Modal>
-        </View>
+        </ScrollView>
     )
 }
 

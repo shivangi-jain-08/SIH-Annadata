@@ -7,10 +7,10 @@ module.exports = function (api) {
       moduleName: '@env',
       path: '.env',
       blocklist: null,
-      allowlist: null,
+      allowlist: ['GEMINI_API_KEY', 'WEATHER_API_KEY', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'],
       safe: false,
-      allowUndefined: true,
-      verbose: false,
+      allowUndefined: false,
+      verbose: true,
     }]],
 
   };

@@ -3,8 +3,36 @@ import { View, Text, ScrollView, TextInput, TouchableOpacity, Alert, Animated, D
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from '../Icon';
-import { GEMINI_API_KEY } from '@env';
+import GEMINI_CONFIG from '../config/gemini.config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+
+// Rate limiter to prevent quota exhaustion
+class RateLimiter {
+  constructor(maxRequests = 15, windowMs = 60000) { // 15 requests per minute
+    this.maxRequests = maxRequests;
+    this.windowMs = windowMs;
+    this.requests = [];
+  }
+
+  async throttle() {
+    const now = Date.now();
+    // Remove requests outside the current window
+    this.requests = this.requests.filter(time => now - time < this.windowMs);
+    
+    if (this.requests.length >= this.maxRequests) {
+      const oldestRequest = this.requests[0];
+      const waitTime = this.windowMs - (now - oldestRequest);
+      console.log(`⏰ Rate limit reached. Waiting ${Math.ceil(waitTime / 1000)}s...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime + 100));
+      return this.throttle(); // Retry after waiting
+    }
+    
+    this.requests.push(now);
+    return true;
+  }
+}
+
+const geminiRateLimiter = new RateLimiter(15, 60000); // 15 requests per minute
 import * as Speech from 'expo-speech';
 import { Audio } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
@@ -223,11 +251,14 @@ const ChatBot = () => {
         try {
             console.log('Initializing Gemini chat session with system instruction...');
             
-            const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+            // Apply rate limiting
+            await geminiRateLimiter.throttle();
+            
+            const genAI = new GoogleGenerativeAI(GEMINI_CONFIG.apiKey);
             const systemInstruction = generateSystemInstruction();
             
             const model = genAI.getGenerativeModel({ 
-                model: "gemini-2.0-flash",
+                model: "gemini-2.5-flash",
                 systemInstruction: systemInstruction
             });
             
@@ -743,6 +774,9 @@ const ChatBot = () => {
       try {
         console.log('Processing voice directly to response with Gemini AI:', audioUri);
         
+        // Apply rate limiting
+        await geminiRateLimiter.throttle();
+        
         // Read audio file as base64
         const audioResponse = await fetch(audioUri);
         const audioBlob = await audioResponse.blob();
@@ -759,11 +793,11 @@ const ChatBot = () => {
         });
 
         // Initialize Gemini AI with system instruction
-        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+        const genAI = new GoogleGenerativeAI(GEMINI_CONFIG.apiKey);
         const systemInstruction = generateSystemInstruction();
         
         const model = genAI.getGenerativeModel({ 
-          model: "gemini-2.0-flash",
+          model: "gemini-2.5-flash",
           systemInstruction: systemInstruction
         });
 
@@ -896,8 +930,9 @@ const ChatBot = () => {
           reader.readAsDataURL(audioBlob);
         });
 
-        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        await geminiRateLimiter.throttle();
+        const genAI = new GoogleGenerativeAI(GEMINI_CONFIG.apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         const transcriptionPrompt = `Transcribe this audio accurately. Return only the spoken text in the original language and script.`;
         
@@ -1135,8 +1170,9 @@ const ChatBot = () => {
         });
 
         // Initialize Gemini AI for vision analysis
-        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        await geminiRateLimiter.throttle();
+        const genAI = new GoogleGenerativeAI(GEMINI_CONFIG.apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         // Create comprehensive plant disease analysis prompt
         const diseaseAnalysisPrompt = `
@@ -1161,7 +1197,7 @@ const ChatBot = () => {
           - Be specific and actionable in treatments
           - Include organic solutions when possible
           - If no clear disease is visible, mention general health tips
-          - Keep response under 350 words
+          - Keep response under 250 words
           - Use emojis appropriately: 🌱🍃🐛🦠💊🌿💧☀️
           
           If you cannot clearly identify issues, provide general plant care advice.`;
@@ -1278,8 +1314,9 @@ const ChatBot = () => {
         console.log('Crop recommendation data prepared:', cropRecommendationData);
 
         // Initialize Gemini AI for crop recommendation
-        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        await geminiRateLimiter.throttle();
+        const genAI = new GoogleGenerativeAI(GEMINI_CONFIG.apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         // Create comprehensive crop recommendation prompt
         const cropRecommendationPrompt = `
@@ -1581,6 +1618,9 @@ Remember: You have REAL DATA - use it to give SPECIFIC, CONFIDENT advice that he
       setError('');
 
       try {
+        // Apply rate limiting
+        await geminiRateLimiter.throttle();
+        
         const detectedLang = detectLanguage(userMessage.text);
         setDetectedLanguage(detectedLang);
 
@@ -1686,8 +1726,8 @@ Remember: You have REAL DATA - use it to give SPECIFIC, CONFIDENT advice that he
           
         } else {
           // Handle regular agricultural queries with comprehensive user context
-          const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-          const modelName = "gemini-2.0-flash";
+          const genAI = new GoogleGenerativeAI(GEMINI_CONFIG.apiKey);
+          const modelName = "gemini-2.5-flash";
           
           // Refresh chat session if context data changed significantly
           if (!chatSessionRef.current) {

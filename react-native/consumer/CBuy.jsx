@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { 
   View, 
   Text, 
@@ -10,10 +10,14 @@ import {
   FlatList,
   Alert,
   TextInput,
-  Modal
+  Modal,
+  ActivityIndicator,
+  RefreshControl
 } from 'react-native'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import Icon from '../Icon'
+import ProductService from '../services/ProductService'
+import CartService from '../services/CartService'
 
 const { width } = Dimensions.get('window')
 
@@ -177,9 +181,119 @@ const CBuy = () => {
   const [showFilters, setShowFilters] = useState(false)
   const [viewMode, setViewMode] = useState('products') // 'products' or 'vendors'
   const [cartItems, setCartItems] = useState([])
+  const [products, setProducts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [vendors, setVendors] = useState([])
 
-  // Sample vendor data
-  const nearbyVendors = [
+  // Load products on component mount
+  useEffect(() => {
+    loadProducts()
+    loadCartCount()
+  }, [])
+
+  // Reload cart count when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadCartCount()
+    }, [])
+  )
+
+  const loadProducts = async () => {
+    try {
+      setLoading(true)
+      const result = await ProductService.getVendorProducts()
+      
+      if (result.success && result.data) {
+        setProducts(result.data)
+        
+        // Extract unique vendors from products
+        const vendorsMap = new Map()
+        result.data.forEach(product => {
+          if (product.sellerId && typeof product.sellerId === 'object') {
+            const vendorId = product.sellerId._id
+            if (!vendorsMap.has(vendorId)) {
+              vendorsMap.set(vendorId, {
+                id: vendorId,
+                name: product.sellerId.name || 'Unknown Vendor',
+                location: extractLocation(product.sellerId),
+                distance: calculateDistance(product.sellerId.location),
+                rating: 4.5, // Mock rating for now
+                reviews: Math.floor(Math.random() * 100) + 20,
+                image: `https://via.placeholder.com/80x80/4CAF50/FFFFFF?text=${(product.sellerId.name || 'V').charAt(0)}`,
+                verified: true,
+                organic: product.quality === 'Organic',
+                totalProducts: 0,
+                responseTime: '< 2h',
+                successRate: 95 + Math.floor(Math.random() * 5),
+                products: []
+              })
+            }
+            const vendor = vendorsMap.get(vendorId)
+            vendor.totalProducts++
+            vendor.products.push(product)
+          }
+        })
+        
+        setVendors(Array.from(vendorsMap.values()))
+        console.log('CBuy: Loaded products:', result.data.length, 'Vendors:', vendorsMap.size)
+      } else {
+        console.error('Failed to load products:', result.message)
+      }
+    } catch (error) {
+      console.error('Error loading products:', error)
+      Alert.alert('Error', 'Failed to load products. Please try again.')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
+
+  const extractLocation = (seller) => {
+    if (!seller) return 'Location not available'
+    
+    if (seller.address) {
+      const parts = seller.address.split(',').map(p => p.trim())
+      if (parts.length >= 2) {
+        return parts.slice(-3, -1).join(', ')
+      }
+      return parts[0]
+    }
+    
+    if (seller.location) {
+      const loc = seller.location
+      if (loc.district && loc.state) {
+        return `${loc.district}, ${loc.state}`
+      }
+      if (loc.state) return loc.state
+    }
+    
+    return 'Location not available'
+  }
+
+  const calculateDistance = (location) => {
+    // Mock distance calculation
+    // In real app, use geolocation library
+    const distance = (Math.random() * 10 + 1).toFixed(1)
+    return `${distance} km`
+  }
+
+  const onRefresh = () => {
+    setRefreshing(true)
+    loadProducts()
+  }
+
+  const loadCartCount = async () => {
+    try {
+      const items = await CartService.getCartItems()
+      setCartItems(items)
+    } catch (error) {
+      console.error('Error loading cart count:', error)
+    }
+  }
+
+  // Sample vendor data (keeping as fallback)
+  const nearbyVendors = vendors.length > 0 ? vendors : [
     {
       id: 1,
       name: 'Green Valley Farms',
@@ -224,147 +338,131 @@ const CBuy = () => {
     }
   ]
 
-  // Sample products data
-  const products = [
-    {
-      id: 1,
-      name: 'Fresh Organic Tomatoes',
-      vendorName: 'Green Valley Farms',
-      vendorRating: 4.8,
-      location: 'Punjabi Bagh',
-      price: 35,
-      originalPrice: 40,
-      discount: 12,
-      stock: 150,
-      minOrder: 5,
-      daysAgo: 1,
-      isNew: true,
-      image: 'https://via.placeholder.com/150x120/F44336/FFFFFF?text=Tomato'
-    },
-    {
-      id: 2,
-      name: 'Premium Potatoes',
-      vendorName: 'Organic Harvest Co.',
-      vendorRating: 4.6,
-      location: 'Lajpat Nagar',
-      price: 28,
-      originalPrice: null,
-      discount: null,
-      stock: 200,
-      minOrder: 10,
-      daysAgo: 2,
-      isNew: false,
-      image: 'https://via.placeholder.com/150x120/8BC34A/FFFFFF?text=Potato'
-    },
-    {
-      id: 3,
-      name: 'Fresh Red Onions',
-      vendorName: 'Fresh Farm Direct',
-      vendorRating: 4.4,
-      location: 'Karol Bagh',
-      price: 22,
-      originalPrice: 25,
-      discount: 12,
-      stock: 80,
-      minOrder: 5,
-      daysAgo: 3,
-      isNew: false,
-      image: 'https://via.placeholder.com/150x120/9C27B0/FFFFFF?text=Onion'
-    },
-    {
-      id: 4,
-      name: 'Organic Carrots',
-      vendorName: 'Green Valley Farms',
-      vendorRating: 4.8,
-      location: 'Punjabi Bagh',
-      price: 45,
-      originalPrice: null,
-      discount: null,
-      stock: 60,
-      minOrder: 3,
-      daysAgo: 1,
-      isNew: true,
-      image: 'https://via.placeholder.com/150x120/FF9800/FFFFFF?text=Carrot'
-    },
-    {
-      id: 5,
-      name: 'Fresh Green Beans',
-      vendorName: 'Organic Harvest Co.',
-      vendorRating: 4.6,
-      location: 'Lajpat Nagar',
-      price: 38,
-      originalPrice: 42,
-      discount: 10,
-      stock: 45,
-      minOrder: 2,
-      daysAgo: 4,
-      isNew: false,
-      image: 'https://via.placeholder.com/150x120/4CAF50/FFFFFF?text=Beans'
-    },
-    {
-      id: 6,
-      name: 'Sweet Corn',
-      vendorName: 'Fresh Farm Direct',
-      vendorRating: 4.4,
-      location: 'Karol Bagh',
-      price: 32,
-      originalPrice: null,
-      discount: null,
-      stock: 75,
-      minOrder: 4,
-      daysAgo: 5,
-      isNew: false,
-      image: 'https://via.placeholder.com/150x120/FFC107/FFFFFF?text=Corn'
-    }
-  ]
-
-  const filters = ['All', 'Vegetables', 'Fruits', 'Organic Only', 'Verified Vendors', 'New Arrivals']
+  const filters = ['All', 'Vegetables', 'Fruits', 'Grains', 'Pulses', 'Spices', 'Organic Only']
   const sortOptions = [
     { key: 'Latest', title: 'Latest Added', icon: 'Clock' },
-    { key: 'Rating', title: 'Vendor Rating', icon: 'Star' },
     { key: 'Price', title: 'Price Low-High', icon: 'ArrowUp' },
-    { key: 'Distance', title: 'Nearest First', icon: 'MapPin' },
-    { key: 'Popular', title: 'Most Popular', icon: 'TrendingUp' }
+    { key: 'PriceDesc', title: 'Price High-Low', icon: 'ArrowDown' },
+    { key: 'Name', title: 'Name A-Z', icon: 'FileText' }
   ]
 
   const filteredProducts = products.filter(product => {
-    if (activeFilter === 'All') return true
-    if (activeFilter === 'Vegetables') return ['Tomatoes', 'Potatoes', 'Onions', 'Carrots', 'Beans'].some(veg => product.name.includes(veg))
-    if (activeFilter === 'Organic Only') return product.name.includes('Organic')
-    if (activeFilter === 'New Arrivals') return product.isNew
-    return true
-  }).filter(product => 
-    product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.vendorName.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+    // Filter by category
+    let categoryMatch = true
+    if (activeFilter !== 'All') {
+      if (activeFilter === 'Organic Only') {
+        categoryMatch = product.quality === 'Organic' || product.name?.toLowerCase().includes('organic')
+      } else {
+        categoryMatch = product.category?.toLowerCase() === activeFilter.toLowerCase()
+      }
+    }
+    
+    // Filter by search query
+    const searchMatch = searchQuery.trim() === '' || 
+      product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (product.sellerId?.name && product.sellerId.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    
+    return categoryMatch && searchMatch
+  })
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
     switch (activeSort) {
       case 'Latest':
-        return a.daysAgo - b.daysAgo
-      case 'Rating':
-        return b.vendorRating - a.vendorRating
+        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
       case 'Price':
-        return a.price - b.price
-      case 'Distance':
-        return a.daysAgo - b.daysAgo // Mock distance sorting
+        return (a.price || 0) - (b.price || 0)
+      case 'PriceDesc':
+        return (b.price || 0) - (a.price || 0)
+      case 'Name':
+        return (a.name || '').localeCompare(b.name || '')
       default:
         return 0
     }
   })
 
-  const handleAddToCart = (product) => {
-    setCartItems(prev => [...prev, product])
-    Alert.alert('Added to Cart', `${product.name} has been added to your cart!`)
+  // Transform product for display
+  const transformProduct = (product) => {
+    const daysAgo = product.createdAt ? 
+      Math.floor((Date.now() - new Date(product.createdAt)) / (1000 * 60 * 60 * 24)) : 0
+    
+    return {
+      id: product._id,
+      name: product.name,
+      vendorName: product.sellerId?.name || 'Unknown Vendor',
+      vendorRating: 4.5, // Mock rating
+      location: extractLocation(product.sellerId),
+      price: product.price,
+      originalPrice: null,
+      discount: null,
+      stock: product.availableQuantity,
+      minOrder: product.minimumOrderQuantity || 1,
+      daysAgo,
+      isNew: daysAgo <= 7,
+      image: getProductImage(product),
+      category: product.category,
+      quality: product.quality,
+      unit: product.unit,
+      description: product.description,
+      sellerId: product.sellerId
+    }
+  }
+
+  const getProductImage = (product) => {
+    if (product.images && Array.isArray(product.images) && product.images.length > 0) {
+      return product.images[0]
+    }
+    if (product.image) return product.image
+    if (product.imageUrl) return product.imageUrl
+    
+    // Category-based placeholder colors
+    const colors = {
+      vegetables: '4CAF50',
+      fruits: 'F44336',
+      grains: 'FF9800',
+      pulses: '9C27B0',
+      spices: 'FFC107'
+    }
+    const color = colors[product.category?.toLowerCase()] || '2196F3'
+    return `https://via.placeholder.com/150x120/${color}/FFFFFF?text=${product.name?.charAt(0) || 'P'}`
+  }
+
+  const handleAddToCart = async (product) => {
+    try {
+      // Prepare product data for cart
+      const productData = {
+        _id: product.id,
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        unit: product.unit || 'kg',
+        image: product.image,
+        availableQuantity: product.stock || 100,
+        minimumOrderQuantity: product.minOrder || 1,
+        sellerId: product.sellerId
+      }
+
+      const result = await CartService.addToCart(productData, 1)
+      if (result.success) {
+        // Update local cart count
+        setCartItems(result.cart)
+      }
+    } catch (error) {
+      console.error('Error adding to cart:', error)
+      Alert.alert('Error', 'Failed to add item to cart')
+    }
   }
 
   const handleViewDetails = (product) => {
-    Alert.alert('Product Details', `Viewing details for ${product.name}`)
+    navigation.navigate('CProductDetail', { productId: product.id })
+  }
+
+  const handleCart = () => {
+    navigation.navigate('CCart')
   }
 
   const handleFindNearbyVendors = () => {
-    Alert.alert('Find Nearby Vendors', 'Searching for vendors in your area...')
-    // In a real app, this would use location services
+    navigation.navigate('CVendorMap', { vendors: nearbyVendors })
   }
 
   const handleVendorPress = (vendor) => {
@@ -372,7 +470,9 @@ const CBuy = () => {
   }
 
   const handleViewProducts = (vendor) => {
-    Alert.alert('Vendor Products', `Viewing all products from ${vendor.name}`)
+    // Filter products by this vendor and switch to products view
+    setSearchQuery(vendor.name)
+    setViewMode('products')
   }
 
   return (
@@ -393,7 +493,7 @@ const CBuy = () => {
         
         <TouchableOpacity 
           style={styles.cartButton}
-          onPress={() => Alert.alert('Cart', `${cartItems.length} items in cart`)}
+          onPress={handleCart}
         >
           <Icon name="ShoppingCart" size={24} color="white" />
           {cartItems.length > 0 && (
@@ -470,9 +570,9 @@ const CBuy = () => {
       {showFilters && (
         <View style={styles.filtersContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersScroll}>
-            {filters.map((filter, index) => (
+            {filters.map((filter) => (
               <FilterButton
-                key={index}
+                key={filter}
                 title={filter}
                 isActive={activeFilter === filter}
                 onPress={() => setActiveFilter(filter)}
@@ -481,9 +581,9 @@ const CBuy = () => {
           </ScrollView>
           
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.sortScroll}>
-            {sortOptions.map((sort, index) => (
+            {sortOptions.map((sort) => (
               <SortButton
-                key={index}
+                key={sort.key}
                 title={sort.title}
                 icon={sort.icon}
                 isActive={activeSort === sort.key}
@@ -495,39 +595,72 @@ const CBuy = () => {
       )}
 
       {/* Content */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {viewMode === 'vendors' ? (
-          // Vendors View
-          <View style={styles.vendorsContainer}>
-            <Text style={styles.sectionTitle}>Nearby Vendors ({nearbyVendors.length})</Text>
-            {nearbyVendors.map((vendor) => (
-              <VendorCard
-                key={vendor.id}
-                vendor={vendor}
-                onPress={() => handleVendorPress(vendor)}
-                onViewProducts={handleViewProducts}
-              />
-            ))}
-          </View>
-        ) : (
-          // Products View
-          <View style={styles.productsContainer}>
-            <Text style={styles.sectionTitle}>
-              Available Products ({sortedProducts.length})
-            </Text>
-            <View style={styles.productsGrid}>
-              {sortedProducts.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  onAddToCart={handleAddToCart}
-                  onViewDetails={handleViewDetails}
-                />
-              ))}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2196F3" />
+          <Text style={styles.loadingText}>Loading products...</Text>
+        </View>
+      ) : (
+        <ScrollView 
+          style={styles.content} 
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#2196F3']}
+            />
+          }
+        >
+          {viewMode === 'vendors' ? (
+            // Vendors View
+            <View style={styles.vendorsContainer}>
+              <Text style={styles.sectionTitle}>Nearby Vendors ({nearbyVendors.length})</Text>
+              {nearbyVendors.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Icon name="Users" size={48} color="#CCC" />
+                  <Text style={styles.emptyText}>No vendors found</Text>
+                  <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
+                </View>
+              ) : (
+                nearbyVendors.map((vendor) => (
+                  <VendorCard
+                    key={vendor.id}
+                    vendor={vendor}
+                    onPress={() => handleVendorPress(vendor)}
+                    onViewProducts={handleViewProducts}
+                  />
+                ))
+              )}
             </View>
-          </View>
-        )}
-      </ScrollView>
+          ) : (
+            // Products View
+            <View style={styles.productsContainer}>
+              <Text style={styles.sectionTitle}>
+                Available Products ({sortedProducts.length})
+              </Text>
+              {sortedProducts.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Icon name="Package" size={48} color="#CCC" />
+                  <Text style={styles.emptyText}>No products found</Text>
+                  <Text style={styles.emptySubtext}>Try adjusting your search or filters</Text>
+                </View>
+              ) : (
+                <View style={styles.productsGrid}>
+                  {sortedProducts.map((product) => (
+                    <ProductCard
+                      key={product._id || product.id}
+                      product={transformProduct(product)}
+                      onAddToCart={handleAddToCart}
+                      onViewDetails={handleViewDetails}
+                    />
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+        </ScrollView>
+      )}
     </View>
   )
 }
@@ -872,12 +1005,12 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   productsGrid: {
-    gap: 16,
   },
   productCard: {
     backgroundColor: 'white',
     borderRadius: 15,
     padding: 16,
+    marginBottom: 16,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -898,13 +1031,13 @@ const styles = StyleSheet.create({
     top: 8,
     left: 8,
     flexDirection: 'row',
-    gap: 6,
   },
   newBadge: {
     backgroundColor: '#4CAF50',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    marginRight: 6,
   },
   discountBadge: {
     backgroundColor: '#F44336',
@@ -979,7 +1112,6 @@ const styles = StyleSheet.create({
   productActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   addToCartButton: {
     backgroundColor: '#4CAF50',
@@ -989,6 +1121,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 8,
     flex: 1,
+    marginRight: 8,
   },
   addToCartText: {
     fontSize: 12,
@@ -1000,11 +1133,43 @@ const styles = StyleSheet.create({
     backgroundColor: '#E3F2FD',
     borderRadius: 8,
     padding: 8,
+    marginRight: 8,
   },
   contactButton: {
     backgroundColor: '#E8F5E8',
     borderRadius: 8,
     padding: 8,
+  },
+
+  // Loading
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 16,
+  },
+
+  // Empty state
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#999',
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#CCC',
+    marginTop: 8,
   },
 })
 

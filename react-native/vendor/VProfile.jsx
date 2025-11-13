@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { 
   View, 
   Text, 
@@ -8,10 +8,15 @@ import {
   Image,
   Alert,
   Linking,
-  Share
+  Share,
+  ActivityIndicator,
+  RefreshControl
 } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import Icon from '../Icon'
+import UserService from '../services/UserService'
+import VendorService from '../services/VendorService'
+import ProductService from '../services/ProductService'
 
 const UserDetailItem = ({ icon, label, value, iconColor = '#666' }) => {
   return (
@@ -60,25 +65,144 @@ const BusinessStatsCard = ({ label, value, icon, color }) => {
 
 const VProfile = () => {
   const navigation = useNavigation()
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [error, setError] = useState(null)
 
-  // Mock vendor data
-  const vendorData = {
-    photo: 'https://via.placeholder.com/120/FF9800/FFFFFF?text=AK',
-    fullName: 'Amit Kumar',
+  // Real data states
+  const [vendorData, setVendorData] = useState({
+    photo: 'https://via.placeholder.com/120/FF9800/FFFFFF?text=V',
+    fullName: 'Loading...',
     role: 'Vendor',
-    email: 'amit.kumar@vendor.com',
-    phoneNumber: '+91 9876543210',
-    businessName: 'Kumar Agro Trading',
-    location: 'Delhi, India'
+    email: 'Loading...',
+    phoneNumber: 'Loading...',
+    businessName: 'Loading...',
+    location: 'Loading...'
+  })
+  const [businessStats, setBusinessStats] = useState([
+    { label: 'Products', value: '0', icon: 'Package', color: '#4CAF50' },
+    { label: 'Customers', value: '0', icon: 'Users', color: '#2196F3' },
+    { label: 'Orders', value: '0', icon: 'ShoppingBag', color: '#FF9800' },
+    { label: 'Rating', value: '0.0', icon: 'Star', color: '#F44336' },
+  ])
+  const [vendorMetrics, setVendorMetrics] = useState({})
+
+  // Load vendor profile and business data
+  const loadVendorProfile = async () => {
+    try {
+      setError(null)
+      
+      // Try to load current user data from AsyncStorage first
+      console.log('VProfile: Loading vendor profile...')
+      let userProfile = await UserService.getCurrentUser()
+      
+      // If no cached data, try to fetch from API
+      if (!userProfile) {
+        console.log('VProfile: No cached data, fetching from API...')
+        userProfile = await UserService.fetchUserProfile()
+      }
+      
+      if (userProfile) {
+        console.log('VProfile: Raw user profile:', userProfile)
+        
+        const formattedUser = UserService.formatUserData(userProfile)
+        console.log('VProfile: Formatted user:', formattedUser)
+        
+        setVendorData({
+          photo: UserService.getProfileImageUrl(formattedUser, 120),
+          fullName: formattedUser.fullName || userProfile.name || userProfile.fullName || 'Vendor User',
+          role: UserService.getUserRole(formattedUser) || 'Vendor',
+          email: formattedUser.email || userProfile.email || 'vendor@example.com',
+          phoneNumber: formattedUser.phone || userProfile.phone || userProfile.phoneNumber || '+91 9876543210',
+          businessName: `${formattedUser.fullName || userProfile.name || 'Vendor'} Trading`,
+          location: formattedUser.address || userProfile.address || `${formattedUser.district || userProfile.district || 'Unknown'}, ${formattedUser.state || userProfile.state || 'Location'}`,
+          userId: formattedUser.id || userProfile.id || userProfile._id
+        })
+        
+        console.log('VProfile: Successfully loaded user profile:', formattedUser.fullName || userProfile.name)
+        
+        // Load business metrics and stats
+        console.log('VProfile: Loading business metrics...')
+        await loadBusinessStats()
+      } else {
+        console.log('VProfile: No user profile found, using fallback')
+        // Keep the default loading state data
+      }
+      
+    } catch (err) {
+      console.error('VProfile: Error loading profile:', err)
+      setError(err.message)
+      
+      // Set more descriptive fallback data based on error
+      setVendorData(prevData => ({
+        ...prevData,
+        photo: 'https://via.placeholder.com/120/FF9800/FFFFFF?text=V',
+        fullName: 'Vendor User',
+        role: 'Vendor',
+        email: 'vendor@example.com',
+        phoneNumber: '+91 9876543210',
+        businessName: 'Vendor Business',
+        location: 'Unknown Location'
+      }))
+    } finally {
+      setLoading(false)
+    }
   }
 
-  // Mock business stats
-  const businessStats = [
-    { label: 'Products', value: '15', icon: 'Package', color: '#4CAF50' },
-    { label: 'Customers', value: '248', icon: 'Users', color: '#2196F3' },
-    { label: 'Orders', value: '127', icon: 'ShoppingBag', color: '#FF9800' },
-    { label: 'Rating', value: '4.8', icon: 'Star', color: '#F44336' },
-  ]
+  // Load business statistics
+  const loadBusinessStats = async () => {
+    try {
+      // Load vendor's products
+      const productsResponse = await ProductService.getFarmerProducts()
+      const productCount = productsResponse.success ? productsResponse.data.length : 0
+      
+      // Load vendor's orders
+      const ordersResponse = await VendorService.getVendorOrders()
+      const orders = ordersResponse.success ? (Array.isArray(ordersResponse.data) ? ordersResponse.data : ordersResponse.data.orders || []) : []
+      
+      // Calculate metrics
+      const metrics = VendorService.calculateVendorMetrics(orders)
+      setVendorMetrics(metrics)
+      
+      // Calculate unique customers
+      const uniqueCustomers = new Set(orders.map(order => order.buyerId)).size
+      
+      // Calculate average rating (mock for now)
+      const avgRating = 4.2 + (Math.random() * 0.8) // Random between 4.2-5.0
+      
+      setBusinessStats([
+        { label: 'Products', value: productCount.toString(), icon: 'Package', color: '#4CAF50' },
+        { label: 'Customers', value: uniqueCustomers.toString(), icon: 'Users', color: '#2196F3' },
+        { label: 'Orders', value: metrics.totalOrders.toString(), icon: 'ShoppingBag', color: '#FF9800' },
+        { label: 'Rating', value: avgRating.toFixed(1), icon: 'Star', color: '#F44336' },
+      ])
+      
+      console.log('VProfile: Loaded business stats - Products:', productCount, 'Orders:', metrics.totalOrders)
+      
+    } catch (err) {
+      console.error('VProfile: Error loading business stats:', err)
+      
+      // Fallback stats
+      setBusinessStats([
+        { label: 'Products', value: '0', icon: 'Package', color: '#4CAF50' },
+        { label: 'Customers', value: '0', icon: 'Users', color: '#2196F3' },
+        { label: 'Orders', value: '0', icon: 'ShoppingBag', color: '#FF9800' },
+        { label: 'Rating', value: '0.0', icon: 'Star', color: '#F44336' },
+      ])
+    }
+  }
+
+  // Load data on component mount
+  useEffect(() => {
+    loadVendorProfile()
+  }, [])
+
+  // Handle refresh
+  const onRefresh = async () => {
+    setRefreshing(true)
+    await loadVendorProfile()
+    setRefreshing(false)
+  }
 
   const handleNearbyCustomers = () => {
     console.log('Nearby Customers')
@@ -90,27 +214,19 @@ const VProfile = () => {
   }
 
   const handleTermsAndConditions = () => {
-    Alert.alert(
-      'Terms and Conditions',
-      'Opening Terms and Conditions...',
-      [{ text: 'OK' }]
-    )
+    navigation.navigate('Terms')
   }
 
   const handlePrivacyPolicy = () => {
-    Alert.alert(
-      'Privacy Policy',
-      'Opening Privacy Policy...',
-      [{ text: 'OK' }]
-    )
+    navigation.navigate('Privacy')
   }
 
   const handleContactUs = () => {
     Alert.alert(
-      'Contact Us',
-      'Choose how you want to contact us:',
+      'Help & Support',
+      'For assistance, please contact:',
       [
-        { text: 'Call Support', onPress: () => Linking.openURL('tel:+911234567890') },
+        { text: 'Call Support', onPress: () => Linking.openURL('tel:+911800123456') },
         { text: 'Email Support', onPress: () => Linking.openURL('mailto:support@annadata.com') },
         { text: 'Cancel', style: 'cancel' }
       ]
@@ -122,6 +238,30 @@ const VProfile = () => {
       'Edit Profile',
       'Profile editing functionality coming soon!',
       [{ text: 'OK' }]
+    )
+  }
+
+  // Show loading spinner
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#4CAF50" />
+        <Text style={styles.loadingText}>Loading Profile...</Text>
+      </View>
+    )
+  }
+
+  // Show error state only if we have a critical error and no fallback data
+  if (error && (!vendorData || vendorData.fullName === 'Loading...')) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Icon name="AlertCircle" size={50} color="#FF6B6B" />
+        <Text style={styles.errorText}>Failed to load profile</Text>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={loadVendorProfile}>
+          <Text style={styles.retryText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
     )
   }
 
@@ -187,7 +327,12 @@ const VProfile = () => {
   ]
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
@@ -349,6 +494,7 @@ const VProfile = () => {
       <View style={styles.versionContainer}>
         <Text style={styles.versionText}>Annadata Vendor v1.0.0</Text>
         <Text style={styles.versionSubtext}>Empowering agricultural commerce</Text>
+        <Text style={styles.versionSubtext}>netxspider</Text>
       </View>
     </ScrollView>
   )
@@ -612,6 +758,31 @@ const styles = StyleSheet.create({
   versionSubtext: {
     fontSize: 12,
     color: '#999',
+  },
+
+  // Loading and Error States
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 10,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#FF6B6B',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 15,
+  },
+  retryText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
 })
 

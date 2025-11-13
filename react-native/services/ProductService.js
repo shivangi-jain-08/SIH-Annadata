@@ -80,10 +80,10 @@ class ProductService {
     try {
       const authHeader = await this.getAuthHeader();
       
-      console.log('ProductService: Fetching all products from farmers');
+      console.log('ProductService: Fetching products from farmers only');
       
-      // Fetch all products with farmer role filter
-      const response = await apiRequest(`${API_CONFIG.ENDPOINTS.PRODUCTS}?role=farmer`, {
+      // Use the specific endpoint to get products from farmers only
+      const response = await apiRequest(`${API_CONFIG.ENDPOINTS.PRODUCTS}/by-role/farmer`, {
         method: 'GET',
         headers: authHeader
       });
@@ -91,21 +91,61 @@ class ProductService {
       if (response.success && response.data) {
         // Handle different possible response structures
         const products = response.data.products || response.data || [];
-        console.log('ProductService: Fetched products from farmers:', products.length);
+        console.log('ProductService: Fetched farmer products:', products.length);
         
         return {
           success: true,
           data: products,
-          message: 'Products fetched successfully'
+          message: 'Farmer products fetched successfully'
         };
       } else {
-        throw new Error(response.message || 'Failed to fetch products');
+        throw new Error(response.message || 'Failed to fetch farmer products');
       }
     } catch (error) {
-      console.error('Error fetching all products:', error);
+      console.error('Error fetching farmer products:', error);
       
       // Return mock data as fallback
       const mockData = this.generateMockProductsWithFarmerDetails();
+      return {
+        success: false,
+        data: mockData,
+        message: 'Using mock data - API unavailable',
+        isMock: true
+      };
+    }
+  }
+
+  // Get all products from vendors (for consumers to browse)
+  async getVendorProducts() {
+    try {
+      const authHeader = await this.getAuthHeader();
+      
+      console.log('ProductService: Fetching products from vendors only');
+      
+      // Use the specific endpoint to get products from vendors only
+      const response = await apiRequest(`${API_CONFIG.ENDPOINTS.PRODUCTS}/by-role/vendor`, {
+        method: 'GET',
+        headers: authHeader
+      });
+
+      if (response.success && response.data) {
+        // Handle different possible response structures
+        const products = response.data.products || response.data || [];
+        console.log('ProductService: Fetched vendor products:', products.length);
+        
+        return {
+          success: true,
+          data: products,
+          message: 'Vendor products fetched successfully'
+        };
+      } else {
+        throw new Error(response.message || 'Failed to fetch vendor products');
+      }
+    } catch (error) {
+      console.error('Error fetching vendor products:', error);
+      
+      // Return mock data as fallback
+      const mockData = this.generateMockProductsWithVendorDetails();
       return {
         success: false,
         data: mockData,
@@ -143,136 +183,156 @@ class ProductService {
           address: 'Village Khairpur, Ludhiana, Punjab, India'
         },
         createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString()
+      }
+    ];
+  }
+
+  // Generate mock products with vendor details (populated sellerId)
+  generateMockProductsWithVendorDetails() {
+    return [
+      {
+        _id: 'prod1',
+        name: 'Fresh Vegetables Pack',
+        description: 'Assorted fresh vegetables sourced from local farmers',
+        category: 'vegetables',
+        price: 150,
+        unit: 'pack',
+        availableQuantity: 50,
+        minimumOrderQuantity: 1,
+        quality: 'Fresh',
+        harvestDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+        expiryDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+        isActive: true,
+        sellerId: {
+          _id: 'vendor1',
+          name: 'Green Grocers',
+          role: 'vendor',
+          location: {
+            district: 'Mumbai',
+            state: 'Maharashtra'
+          },
+          address: 'Shop 12, Market Road, Mumbai, Maharashtra, India'
+        },
+        createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
       },
       {
         _id: 'prod2',
-        name: 'Basmati Rice',
-        description: 'Aromatic long grain basmati rice, premium quality',
+        name: 'Organic Fruits Basket',
+        description: 'Premium quality organic fruits handpicked from certified farms',
+        category: 'fruits',
+        price: 280,
+        unit: 'basket',
+        availableQuantity: 30,
+        minimumOrderQuantity: 1,
+        quality: 'Organic',
+        harvestDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+        expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        isActive: true,
+        sellerId: {
+          _id: 'vendor2',
+          name: 'Fresh Mart',
+          role: 'vendor',
+          location: {
+            district: 'Bangalore',
+            state: 'Karnataka'
+          },
+          address: 'Plaza Complex, MG Road, Bangalore, Karnataka, India'
+        },
+        createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString()
+      },
+      {
+        _id: 'prod3',
+        name: 'Rice & Grains Combo',
+        description: 'Best quality basmati rice and mixed grains combo pack',
         category: 'grains',
-        price: 45,
+        price: 220,
         unit: 'kg',
-        availableQuantity: 300,
-        minimumOrderQuantity: 5,
+        availableQuantity: 100,
+        minimumOrderQuantity: 2,
         quality: 'Premium',
         harvestDate: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
         expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
         isActive: true,
         sellerId: {
-          _id: 'farmer2',
-          name: 'Suresh Patel',
-          role: 'farmer',
+          _id: 'vendor3',
+          name: 'Grain House',
+          role: 'vendor',
           location: {
-            village: 'Rohtak Village',
-            district: 'Rohtak',
-            state: 'Haryana'
+            district: 'Delhi',
+            state: 'Delhi'
           },
-          address: 'Village Rohtak, Rohtak, Haryana, India'
-        },
-        createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString()
-      },
-      {
-        _id: 'prod3',
-        name: 'Fresh Tomatoes',
-        description: 'Farm fresh organic tomatoes, rich in nutrients',
-        category: 'vegetables',
-        price: 25,
-        unit: 'kg',
-        availableQuantity: 150,
-        minimumOrderQuantity: 2,
-        quality: 'Organic',
-        harvestDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-        expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        isActive: true,
-        sellerId: {
-          _id: 'farmer3',
-          name: 'Priya Sharma',
-          role: 'farmer',
-          location: {
-            village: 'Nashik Village',
-            district: 'Nashik',
-            state: 'Maharashtra'
-          },
-          address: 'Village Nashik, Nashik, Maharashtra, India'
-        },
-        createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
-      },
-      {
-        _id: 'prod4',
-        name: 'Red Onions',
-        description: 'Fresh red onions, perfect for cooking',
-        category: 'vegetables',
-        price: 20,
-        unit: 'kg',
-        availableQuantity: 400,
-        minimumOrderQuantity: 5,
-        quality: 'Standard',
-        harvestDate: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString(),
-        expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        isActive: true,
-        sellerId: {
-          _id: 'farmer4',
-          name: 'Vikram Singh',
-          role: 'farmer',
-          location: {
-            village: 'Jodhpur Village',
-            district: 'Jodhpur',
-            state: 'Rajasthan'
-          },
-          address: 'Village Jodhpur, Jodhpur, Rajasthan, India'
-        },
-        createdAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString()
-      },
-      {
-        _id: 'prod5',
-        name: 'Fresh Apples',
-        description: 'Crisp and juicy apples from hill stations',
-        category: 'fruits',
-        price: 80,
-        unit: 'kg',
-        availableQuantity: 200,
-        minimumOrderQuantity: 1,
-        quality: 'Premium',
-        harvestDate: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString(),
-        expiryDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString(),
-        isActive: true,
-        sellerId: {
-          _id: 'farmer5',
-          name: 'Amit Gupta',
-          role: 'farmer',
-          location: {
-            village: 'Shimla Village',
-            district: 'Shimla',
-            state: 'Himachal Pradesh'
-          },
-          address: 'Village Shimla, Shimla, Himachal Pradesh, India'
-        },
-        createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString()
-      },
-      {
-        _id: 'prod6',
-        name: 'Cotton',
-        description: 'High quality cotton for textile industry',
-        category: 'other',
-        price: 55,
-        unit: 'kg',
-        availableQuantity: 350,
-        minimumOrderQuantity: 20,
-        quality: 'Standard',
-        harvestDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-        expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-        isActive: true,
-        sellerId: {
-          _id: 'farmer6',
-          name: 'Ramesh Jain',
-          role: 'farmer',
-          location: {
-            village: 'Surat Village',
-            district: 'Surat',
-            state: 'Gujarat'
-          },
-          address: 'Village Surat, Surat, Gujarat, India'
+          address: 'Connaught Place, New Delhi, Delhi, India'
         },
         createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      }
+    ];
+  }
+
+  // Generate mock products for development/fallback (farmer's own products)
+  generateMockProducts() {
+    return [
+      {
+        _id: 'mock_1',
+        sellerId: 'user_123',
+        name: 'Fresh Tomatoes',
+        description: 'Organic red tomatoes, freshly harvested from Punjab farms. Perfect for cooking and salads.',
+        category: 'vegetables',
+        price: 40,
+        unit: 'kg',
+        availableQuantity: 100,
+        minimumOrderQuantity: 5,
+        images: [],
+        location: {
+          district: 'Ludhiana',
+          state: 'Punjab'
+        },
+        isActive: true,
+        harvestDate: new Date('2025-09-20'),
+        expiryDate: new Date('2025-09-27'),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        _id: 'mock_2',
+        sellerId: 'user_123',
+        name: 'Basmati Rice',
+        description: 'Premium quality basmati rice with long grains and aromatic fragrance. Aged for perfect texture.',
+        category: 'grains',
+        price: 80,
+        unit: 'kg',
+        availableQuantity: 500,
+        minimumOrderQuantity: 10,
+        images: [],
+        location: {
+          district: 'Amritsar',
+          state: 'Punjab'
+        },
+        isActive: true,
+        harvestDate: new Date('2025-08-15'),
+        expiryDate: new Date('2026-08-15'),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        _id: 'mock_3',
+        sellerId: 'user_123',
+        name: 'Organic Spinach',
+        description: 'Fresh organic spinach leaves, grown without pesticides. Rich in iron and vitamins.',
+        category: 'vegetables',
+        price: 35,
+        unit: 'kg',
+        availableQuantity: 50,
+        minimumOrderQuantity: 2,
+        images: [],
+        location: {
+          district: 'Chandigarh',
+          state: 'Punjab'
+        },
+        isActive: true,
+        harvestDate: new Date('2025-09-25'),
+        expiryDate: new Date('2025-10-02'),
+        createdAt: new Date(),
+        updatedAt: new Date()
       }
     ];
   }
@@ -400,18 +460,56 @@ class ProductService {
     const farmer = product.sellerId || {};
     const farmerLocation = farmer.location || {};
     
-    // Format farmer location
+    // Format farmer location with multiple fallback strategies
     let locationString = 'Location not specified';
-    if (farmerLocation.district && farmerLocation.state) {
-      locationString = `${farmerLocation.district}, ${farmerLocation.state}`;
-    } else if (farmerLocation.village && farmerLocation.state) {
-      locationString = `${farmerLocation.village}, ${farmerLocation.state}`;
-    } else if (farmer.address) {
-      // Extract location from address if structured location not available
-      const addressParts = farmer.address.split(', ');
-      if (addressParts.length >= 2) {
-        locationString = addressParts.slice(-2).join(', '); // Take last 2 parts (district, state)
+    
+    console.log('ProductService: Formatting location for farmer:', farmer.name);
+    console.log('ProductService: Farmer data:', { 
+      hasAddress: !!farmer.address, 
+      hasLocation: !!farmer.location,
+      location: farmer.location,
+      address: farmer.address
+    });
+    
+    // Strategy 1: Use address field (primary source for readable location)
+    if (farmer.address && farmer.address.trim() !== '') {
+      // Extract meaningful location parts from address
+      const addressParts = farmer.address.split(',').map(part => part.trim()).filter(part => part !== '');
+      
+      if (addressParts.length >= 3) {
+        // Take last 3 parts for district/state/country or village/district/state
+        const relevantParts = addressParts.slice(-3);
+        // Remove generic terms like "India" from display
+        const filteredParts = relevantParts.filter(part => 
+          !['India', 'INDIA', 'india'].includes(part.trim())
+        );
+        locationString = filteredParts.length > 0 ? filteredParts.join(', ') : addressParts.slice(-2).join(', ');
+      } else if (addressParts.length >= 2) {
+        // Take last 2 parts for district/state
+        locationString = addressParts.slice(-2).join(', ');
+      } else if (addressParts.length === 1 && addressParts[0] !== '') {
+        locationString = addressParts[0];
       }
+    }
+    // Strategy 2: Check if farmerLocation has readable properties (from old data structure)
+    else if (farmerLocation && typeof farmerLocation === 'object' && !farmerLocation.coordinates) {
+      if (farmerLocation.village && farmerLocation.district && farmerLocation.state) {
+        locationString = `${farmerLocation.village}, ${farmerLocation.district}, ${farmerLocation.state}`;
+      } else if (farmerLocation.district && farmerLocation.state) {
+        locationString = `${farmerLocation.district}, ${farmerLocation.state}`;
+      } else if (farmerLocation.state) {
+        locationString = farmerLocation.state;
+      } else if (farmerLocation.city && farmerLocation.state) {
+        locationString = `${farmerLocation.city}, ${farmerLocation.state}`;
+      }
+    }
+    // Strategy 3: Check if farmer has coordinates but no address (use generic location)
+    else if (farmerLocation && farmerLocation.coordinates && Array.isArray(farmerLocation.coordinates)) {
+      locationString = 'GPS coordinates available';
+    }
+    // Strategy 4: Check if farmer has phone number (at least show that farmer is contactable)
+    else if (farmer.phone) {
+      locationString = 'Contact farmer for location';
     }
     
     return {

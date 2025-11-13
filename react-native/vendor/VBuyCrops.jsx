@@ -199,9 +199,9 @@ const VBuyCrops = () => {
           .map(product => ({
             id: product.id,
             name: product.cropName,
-            farmer: product.farmerName || 'Unknown Farmer',
-            location: product.location || 'Unknown Location',
-            quality: product.quality || 'Standard',
+            farmer: product.farmerName,
+            location: product.location,
+            quality: product.quality,
             price: product.price,
             available: product.availableQuantity,
             category: mapCategory(product.category),
@@ -209,6 +209,7 @@ const VBuyCrops = () => {
             description: product.description,
             harvestDate: product.harvestDate,
             expiryDate: product.expiryDate,
+            farmerId: product.farmerId,
             cartQuantity: 0
           }));
         
@@ -315,7 +316,11 @@ const VBuyCrops = () => {
       Alert.alert('Empty Cart', 'Please add items to cart before proceeding')
       return
     }
-    Alert.alert('Cart', `Going to cart with ${cartItemsCount} items`)
+    
+    // Get items that are in cart (cartQuantity > 0)
+    const itemsInCart = crops.filter(crop => crop.cartQuantity > 0)
+    
+    navigation.navigate('VCart', { cartItems: itemsInCart })
   }
 
   const getFilteredCrops = () => {

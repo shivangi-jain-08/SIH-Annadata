@@ -40,6 +40,73 @@ class VendorService {
         }
     }
 
+    // Get nearby consumers with active orders from this vendor
+    static async getNearbyConsumers(vendorLocation = null) {
+        try {
+            const token = await AsyncStorage.getItem('userToken');
+            const headers = {};
+            
+            if (token) {
+                headers.Authorization = `Bearer ${token}`;
+            }
+
+            console.log('Fetching nearby consumers...');
+
+            // API endpoint for getting consumers with active orders from this vendor
+            let endpoint = '/vendors/nearby-consumers';
+            if (vendorLocation) {
+                endpoint += `?lat=${vendorLocation.latitude}&lng=${vendorLocation.longitude}&radius=10`;
+            }
+
+            const response = await apiRequest(endpoint, {
+                method: 'GET',
+                headers,
+            });
+
+            if (response.success) {
+                return {
+                    success: true,
+                    data: response.data.consumers || response.data || []
+                };
+            } else {
+                throw new Error(response.message || 'Failed to fetch consumers');
+            }
+        } catch (error) {
+            console.error('Error fetching nearby consumers:', error);
+            
+            // Return mock data for development/offline mode
+            return {
+                success: false,
+                isMock: true,
+                data: this.getMockNearbyConsumers(vendorLocation),
+                error: error.message
+            };
+        }
+    }
+
+    // Generate mock nearby consumers data
+    static getMockNearbyConsumers(vendorLocation) {
+        const baseLat = vendorLocation?.latitude || 28.6139;
+        const baseLng = vendorLocation?.longitude || 77.2090;
+
+        return Array.from({ length: 8 }, (_, index) => ({
+            id: `consumer_${index + 1}`,
+            name: `Consumer ${index + 1}`,
+            email: `consumer${index + 1}@example.com`,
+            phone: `+91 98765432${10 + index}`,
+            address: `Address ${index + 1}, Sector ${index + 10}, Delhi`,
+            latitude: baseLat + (Math.random() - 0.5) * 0.02, // Within ~1km radius
+            longitude: baseLng + (Math.random() - 0.5) * 0.02,
+            activeOrders: Math.floor(Math.random() * 5) + 1,
+            orderValue: Math.floor(Math.random() * 15000) + 2000,
+            distance: Math.random() * 3 + 0.5, // 0.5 to 3.5 km
+            lastOrderDate: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
+            preferredCrops: ['Wheat', 'Rice', 'Tomatoes', 'Potatoes'].slice(0, Math.floor(Math.random() * 3) + 1),
+            rating: Math.floor(Math.random() * 2) + 4, // 4-5 star rating
+            isVerified: Math.random() > 0.2 // 80% verified
+        }));
+    }
+
     // Get vendor orders (both buying and selling)
     static async getVendorOrders(type = 'all') {
         try {

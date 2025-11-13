@@ -10,9 +10,11 @@ import {
   ActivityIndicator,
   RefreshControl
 } from 'react-native'
+import { useNavigation } from '@react-navigation/native'
 import Icon from '../Icon'
 import VendorService from '../services/VendorService'
 import UserService from '../services/UserService'
+import OrderService from '../services/OrderService'
 
 const { width } = Dimensions.get('window')
 
@@ -77,14 +79,42 @@ const QuickActionButton = ({ icon, title, color, onPress }) => {
 }
 
 const VDashboard = () => {
+  const navigation = useNavigation()
+  
   // State for vendor data
   const [vendorData, setVendorData] = useState([]);
   const [vendorStats, setVendorStats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-  const [recentActivity, setRecentActivity] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [vendorName, setVendorName] = useState('Vendor');
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [sellingOrders, setSellingOrders] = useState([]);
+
+  // Load vendor's purchase orders from farmers (vendor as buyer)
+  const loadPurchaseOrders = async () => {
+    try {
+      const fetchedOrders = await OrderService.getMyOrders();
+      console.log('Loaded purchase orders:', fetchedOrders);
+      setPurchaseOrders(fetchedOrders || []);
+    } catch (error) {
+      console.error('Error loading purchase orders:', error);
+      setPurchaseOrders([]);
+    }
+  };
+
+  // Load vendor's selling orders to consumers (vendor as seller)
+  const loadSellingOrders = async () => {
+    try {
+      const fetchedOrders = await VendorService.getVendorOrders('selling');
+      console.log('Loaded selling orders:', fetchedOrders);
+      setSellingOrders(fetchedOrders || []);
+    } catch (error) {
+      console.error('Error loading selling orders:', error);
+      setSellingOrders([]);
+    }
+  };
 
   // Load user data (vendor name)
   const loadUserData = async () => {
@@ -107,58 +137,49 @@ const VDashboard = () => {
     }
   };
 
-  // Load vendor dashboard data
+  // Load vendor dashboard data (business stats from selling to consumers)
   const loadVendorData = async () => {
     try {
       setError(null);
-      const response = await VendorService.getVendorDashboardData();
       
-      if (response.success) {
-        const orders = response.data.orders || response.data || [];
-        setVendorData(orders);
-        
-        // Calculate metrics
-        const metrics = VendorService.calculateVendorMetrics(orders);
-        
-        // Set stats for display
-        const stats = [
-          { 
-            title: 'Total Revenue', 
-            value: VendorService.formatCurrency(metrics.totalRevenue), 
-            change: metrics.revenueGrowth, 
-            icon: 'DollarSign', 
-            color: '#4CAF50' 
-          },
-          { 
-            title: 'Active Orders', 
-            value: metrics.activeOrders.toString(), 
-            change: metrics.activeOrdersGrowth, 
-            icon: 'ShoppingBag', 
-            color: '#FF9800' 
-          }
-        ];
-        
-        setVendorStats(stats);
-        
-        // Set recent activity
-        const activity = VendorService.getRecentActivity(orders);
-        setRecentActivity(activity);
-        
-        // Handle offline/mock indicators
-        if (response.isMock) {
-          setError('Using demo data - API unavailable');
+      // Load vendor's selling orders (orders where vendor is the seller to consumers)
+      const response = await VendorService.getVendorOrders('selling');
+      
+      // Ensure ordersData is an array
+      const ordersArray = Array.isArray(response) ? response : [];
+      setVendorData(ordersArray);
+      setSellingOrders(ordersArray);
+      
+      // Calculate metrics from selling orders
+      const metrics = VendorService.calculateVendorMetrics(ordersArray);
+      
+      // Set stats for display - showing sales to consumers
+      const stats = [
+        { 
+          title: 'Total Sales', 
+          value: VendorService.formatCurrency(metrics.totalRevenue), 
+          change: metrics.revenueGrowth, 
+          icon: 'DollarSign', 
+          color: '#4CAF50' 
+        },
+        { 
+          title: 'Active Sales', 
+          value: metrics.activeOrders.toString(), 
+          change: metrics.activeOrdersGrowth, 
+          icon: 'ShoppingBag', 
+          color: '#FF9800' 
         }
-      } else {
-        setError(response.error || 'Failed to load vendor data');
-      }
+      ];
+      
+      setVendorStats(stats);
     } catch (err) {
       console.error('Error loading vendor data:', err);
       setError(err.message || 'Failed to load data');
       
       // Set empty stats on error
       setVendorStats([
-        { title: 'Total Revenue', value: '₹0', change: 0, icon: 'DollarSign', color: '#4CAF50' },
-        { title: 'Active Orders', value: '0', change: 0, icon: 'ShoppingBag', color: '#FF9800' }
+        { title: 'Total Sales', value: '₹0', change: 0, icon: 'DollarSign', color: '#4CAF50' },
+        { title: 'Active Sales', value: '0', change: 0, icon: 'ShoppingBag', color: '#FF9800' }
       ]);
     } finally {
       setLoading(false);
@@ -168,7 +189,7 @@ const VDashboard = () => {
   // Handle refresh
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadUserData(), loadVendorData()]);
+    await Promise.all([loadUserData(), loadVendorData(), loadPurchaseOrders(), loadSellingOrders()]);
     setRefreshing(false);
   };
 
@@ -176,6 +197,8 @@ const VDashboard = () => {
   useEffect(() => {
     loadUserData();
     loadVendorData();
+    loadPurchaseOrders();
+    loadSellingOrders();
   }, []);
 
   const handleBuyFromFarmers = () => {
@@ -195,12 +218,7 @@ const VDashboard = () => {
   }
 
   const handleNearbyConsumers = () => {
-    console.log('Nearby Consumer')
-    Alert.alert(
-      'Find Nearby Consumers',
-      'Searching for consumers in your area...',
-      [{ text: 'OK' }]
-    )
+    navigation.navigate('VNearbyConsumers')
   }
 
   const handleInventory = () => {
@@ -217,6 +235,45 @@ const VDashboard = () => {
 
   const handleProfile = () => {
     Alert.alert('Profile', 'Opening profile settings...')
+  }
+
+  const handleViewAllOrders = () => {
+    navigation.navigate('My Orders')
+  }
+
+  const handleOrderPress = (order) => {
+    // Navigate to order details or open modal
+    Alert.alert(
+      'Order Details',
+      `Order #${order._id?.slice(-6).toUpperCase()}\nStatus: ${order.status}\nAmount: ₹${order.totalAmount}`,
+      [{ text: 'OK' }]
+    )
+  }
+
+  const getStatusColor = (status) => {
+    const colors = {
+      pending: '#FF9800',
+      confirmed: '#2196F3',
+      processing: '#9C27B0',
+      shipped: '#3F51B5',
+      in_transit: '#3F51B5',
+      delivered: '#4CAF50',
+      cancelled: '#F44336',
+    }
+    return colors[status] || '#666'
+  }
+
+  const getStatusIcon = (status) => {
+    const icons = {
+      pending: 'Clock',
+      confirmed: 'CheckCircle',
+      processing: 'Loader',
+      shipped: 'Truck',
+      in_transit: 'Truck',
+      delivered: 'Package',
+      cancelled: 'XCircle',
+    }
+    return icons[status] || 'ShoppingBag'
   }
 
   if (loading) {
@@ -311,52 +368,118 @@ const VDashboard = () => {
         </View>
       </View>
 
-      {/* Quick Actions */}
-      <View style={styles.quickActionsSection}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        <View style={styles.quickActionsGrid}>
-          <QuickActionButton
-            icon="Package"
-            title="Inventory"
-            color="#9C27B0"
-            onPress={handleInventory}
-          />
-          <QuickActionButton
-            icon="ChartBar"
-            title="Analytics"
-            color="#FF5722"
-            onPress={handleAnalytics}
-          />
-          <QuickActionButton
-            icon="User"
-            title="Profile"
-            color="#607D8B"
-            onPress={handleProfile}
-          />
+      {/* My Orders Section */}
+      <View style={styles.ordersSection}>
+        <View style={styles.ordersSectionHeader}>
+          <Text style={styles.sectionTitle}>My Orders from Farmers</Text>
+          <TouchableOpacity onPress={handleViewAllOrders}>
+            <Text style={styles.viewAllText}>View All →</Text>
+          </TouchableOpacity>
         </View>
-      </View>
 
-      {/* Recent Activity Section */}
-      <View style={styles.recentActivitySection}>
-        <Text style={styles.sectionTitle}>Recent Activity</Text>
-        <View style={styles.activityCard}>
-          {recentActivity.length > 0 ? (
-            recentActivity.map((activity, index) => (
-              <View key={activity.id || index} style={styles.activityItem}>
-                <View style={[styles.activityIcon, { backgroundColor: activity.color + '20' }]}>
-                  <Icon name={activity.icon} size={16} color={activity.color} />
+        {/* Order Status Overview */}
+        <View style={styles.ordersOverview}>
+          <View style={styles.orderStatusCard}>
+            <View style={[styles.orderStatusIcon, { backgroundColor: '#FFF3E0' }]}>
+              <Icon name="Clock" size={24} color="#FF9800" />
+            </View>
+            <Text style={styles.orderStatusCount}>
+              {Array.isArray(purchaseOrders) ? purchaseOrders.filter(order => order.status === 'pending').length : 0}
+            </Text>
+            <Text style={styles.orderStatusLabel}>Pending</Text>
+          </View>
+
+          <View style={styles.orderStatusCard}>
+            <View style={[styles.orderStatusIcon, { backgroundColor: '#E3F2FD' }]}>
+              <Icon name="CheckCircle" size={24} color="#2196F3" />
+            </View>
+            <Text style={styles.orderStatusCount}>
+              {Array.isArray(purchaseOrders) ? purchaseOrders.filter(order => order.status === 'confirmed').length : 0}
+            </Text>
+            <Text style={styles.orderStatusLabel}>Confirmed</Text>
+          </View>
+
+          <View style={styles.orderStatusCard}>
+            <View style={[styles.orderStatusIcon, { backgroundColor: '#F3E5F5' }]}>
+              <Icon name="Loader" size={24} color="#9C27B0" />
+            </View>
+            <Text style={styles.orderStatusCount}>
+              {Array.isArray(purchaseOrders) ? purchaseOrders.filter(order => order.status === 'processing').length : 0}
+            </Text>
+            <Text style={styles.orderStatusLabel}>Processing</Text>
+          </View>
+
+          <View style={styles.orderStatusCard}>
+            <View style={[styles.orderStatusIcon, { backgroundColor: '#E8F5E9' }]}>
+              <Icon name="Package" size={24} color="#4CAF50" />
+            </View>
+            <Text style={styles.orderStatusCount}>
+              {Array.isArray(purchaseOrders) ? purchaseOrders.filter(order => order.status === 'delivered').length : 0}
+            </Text>
+            <Text style={styles.orderStatusLabel}>Delivered</Text>
+          </View>
+        </View>
+
+        {/* Recent Orders List */}
+        <View style={styles.recentOrdersList}>
+          {Array.isArray(purchaseOrders) && purchaseOrders.length > 0 ? (
+            purchaseOrders.slice(0, 5).map((order, index) => (
+              <TouchableOpacity 
+                key={order._id || index} 
+                style={styles.orderItem}
+                onPress={() => handleOrderPress(order)}
+              >
+                <View style={styles.orderItemLeft}>
+                  <View style={[
+                    styles.orderItemIcon, 
+                    { backgroundColor: getStatusColor(order.status) + '20' }
+                  ]}>
+                    <Icon 
+                      name={getStatusIcon(order.status)} 
+                      size={18} 
+                      color={getStatusColor(order.status)} 
+                    />
+                  </View>
+                  <View style={styles.orderItemContent}>
+                    <Text style={styles.orderItemTitle}>
+                      Order #{order._id?.slice(-6).toUpperCase() || 'N/A'}
+                    </Text>
+                    <Text style={styles.orderItemSubtitle}>
+                      {order.sellerId?.name || order.farmer?.name || 'Farmer'}
+                    </Text>
+                    <Text style={styles.orderItemTime}>
+                      {new Date(order.createdAt).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short'
+                      })}
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.activityContent}>
-                  <Text style={styles.activityText}>{activity.activity}</Text>
-                  <Text style={styles.activityTime}>{activity.timeAgo}</Text>
+                <View style={styles.orderItemRight}>
+                  <Text style={styles.orderItemAmount}>
+                    ₹{order.totalAmount?.toLocaleString('en-IN') || '0'}
+                  </Text>
+                  <View style={[
+                    styles.orderStatusBadge,
+                    { backgroundColor: getStatusColor(order.status) + '20' }
+                  ]}>
+                    <Text style={[
+                      styles.orderStatusBadgeText,
+                      { color: getStatusColor(order.status) }
+                    ]}>
+                      {order.status?.replace('_', ' ').toUpperCase()}
+                    </Text>
+                  </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))
           ) : (
-            <View style={styles.noActivityContainer}>
-              <Icon name="Clock" size={32} color="#ccc" />
-              <Text style={styles.noActivityText}>No recent activity</Text>
-              <Text style={styles.noActivitySubtext}>Your order activities will appear here</Text>
+            <View style={styles.noOrdersContainer}>
+              <Icon name="ShoppingBag" size={48} color="#ccc" />
+              <Text style={styles.noOrdersText}>No orders yet</Text>
+              <Text style={styles.noOrdersSubtext}>
+                Your purchase orders from farmers will appear here
+              </Text>
             </View>
           )}
         </View>
@@ -670,6 +793,145 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: 'white',
     marginLeft: 8,
+  },
+
+  // My Orders Section
+  ordersSection: {
+    paddingHorizontal: 20,
+    paddingTop: 30,
+    paddingBottom: 30,
+  },
+  ordersSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  viewAllText: {
+    fontSize: 14,
+    color: '#FF9800',
+    fontWeight: '600',
+  },
+  ordersOverview: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 20,
+  },
+  orderStatusCard: {
+    backgroundColor: 'white',
+    width: (width - 52) / 2,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  orderStatusIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  orderStatusCount: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 4,
+  },
+  orderStatusLabel: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '500',
+  },
+  recentOrdersList: {
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  orderItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  orderItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  orderItemIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  orderItemContent: {
+    flex: 1,
+  },
+  orderItemTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 3,
+  },
+  orderItemSubtitle: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 2,
+  },
+  orderItemTime: {
+    fontSize: 11,
+    color: '#999',
+  },
+  orderItemRight: {
+    alignItems: 'flex-end',
+    marginLeft: 12,
+  },
+  orderItemAmount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 6,
+  },
+  orderStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  orderStatusBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  noOrdersContainer: {
+    alignItems: 'center',
+    padding: 40,
+  },
+  noOrdersText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+    marginTop: 12,
+  },
+  noOrdersSubtext: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 5,
+    textAlign: 'center',
   },
 
   // Recent Activity

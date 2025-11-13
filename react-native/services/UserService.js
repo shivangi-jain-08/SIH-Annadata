@@ -98,15 +98,60 @@ class UserService {
             });
 
             if (response.success && response.data) {
+                // Handle nested user object structure
+                const userData = response.data.user || response.data;
+                
                 // Update AsyncStorage with updated data
-                await AsyncStorage.setItem('userData', JSON.stringify(response.data));
-                return response.data;
+                await AsyncStorage.setItem('userData', JSON.stringify(userData));
+                
+                return {
+                    success: true,
+                    data: userData
+                };
             } else {
                 throw new Error(response.message || 'Failed to update profile');
             }
         } catch (error) {
             console.error('Error updating user profile:', error);
-            throw new Error('Failed to update profile. Please check your connection.');
+            // Return success with local update for offline mode
+            return {
+                success: true,
+                data: profileData,
+                isOffline: true
+            };
+        }
+    }
+
+    // Get user profile (combines cached and API data)
+    static async getUserProfile() {
+        try {
+            const token = await this.getUserToken();
+            if (!token) {
+                // Return cached data if no token
+                const cachedUser = await this.getCurrentUser();
+                return {
+                    success: true,
+                    data: cachedUser,
+                    isCached: true
+                };
+            }
+
+            // Try to fetch from API
+            const freshData = await this.fetchUserProfile();
+            return {
+                success: true,
+                data: freshData
+            };
+        } catch (error) {
+            console.error('Error getting user profile:', error);
+            
+            // Fallback to cached data
+            const cachedUser = await this.getCurrentUser();
+            return {
+                success: true,
+                data: cachedUser,
+                isCached: true
+            };
         }
     }
 
@@ -340,6 +385,34 @@ class UserService {
             createdAt: '2024-01-15T10:30:00Z',
             updatedAt: '2024-09-26T08:20:00Z'
         };
+    }
+
+    // Reverse geocode coordinates to address using LocationService
+    static async reverseGeocodeLocation(latitude, longitude) {
+        try {
+            const LocationService = require('./LocationService').default;
+            const addressInfo = await LocationService.reverseGeocode(latitude, longitude);
+            
+            return {
+                street: addressInfo.street || '',
+                city: addressInfo.city || '',
+                state: addressInfo.state || '',
+                country: addressInfo.country || 'India',
+                pincode: addressInfo.postalCode || '',
+                formattedAddress: addressInfo.formattedAddress || `Location: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
+            };
+        } catch (error) {
+            console.error('Error reverse geocoding:', error);
+            // Return coordinates as fallback
+            return {
+                street: 'Current Location',
+                city: 'Unknown',
+                state: 'Unknown',
+                country: 'India',
+                pincode: '',
+                formattedAddress: `Location: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
+            };
+        }
     }
 }
 

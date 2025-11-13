@@ -14,7 +14,7 @@ import {
 import { useNavigation } from '@react-navigation/native'
 import * as ImagePicker from 'expo-image-picker'
 import { GoogleGenerativeAI } from '@google/generative-ai'
-import { GEMINI_API_KEY } from '@env'
+import GEMINI_CONFIG from '../../config/gemini.config'
 import Icon from '../../Icon'
 
 const { width } = Dimensions.get('window')
@@ -262,8 +262,8 @@ const DiseaseDetection = () => {
         });
 
         // Initialize Gemini AI for vision analysis
-        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const genAI = new GoogleGenerativeAI(GEMINI_CONFIG.apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         // Create comprehensive plant disease analysis prompt
         const diseaseAnalysisPrompt = `

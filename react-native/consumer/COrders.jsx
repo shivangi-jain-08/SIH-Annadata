@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { 
   View, 
   Text, 
@@ -8,10 +8,12 @@ import {
   Image,
   Dimensions,
   Alert,
-  RefreshControl
+  RefreshControl,
+  ActivityIndicator
 } from 'react-native'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import Icon from '../Icon'
+import OrderService from '../services/OrderService'
 
 const { width } = Dimensions.get('window')
 
@@ -73,8 +75,8 @@ const OrderCard = ({ order, onPress, onTrack, onReorder, onSupport }) => {
           {order.items.map((item, index) => (
             <View key={index} style={styles.orderItem}>
               <Image source={{ uri: item.image }} style={styles.itemImage} />
-              <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemQuantity}>{item.quantity}kg</Text>
+              <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+              <Text style={styles.itemQuantity}>{item.quantity} {item.unit || 'kg'}</Text>
             </View>
           ))}
         </ScrollView>
@@ -170,109 +172,52 @@ const COrders = () => {
   const navigation = useNavigation()
   const [activeFilter, setActiveFilter] = useState('all')
   const [refreshing, setRefreshing] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [orders, setOrders] = useState([])
+  const [orderStats, setOrderStats] = useState(null)
 
-  // Sample order data
-  const orders = [
-    {
-      id: 'ORD001',
-      date: '25 Sept, 2025',
-      status: 'Delivered',
-      total: 450,
-      vendor: {
-        name: 'Green Valley Farms',
-        location: 'Punjabi Bagh, Delhi',
-        image: 'https://via.placeholder.com/60x60/4CAF50/FFFFFF?text=GV'
-      },
-      items: [
-        { name: 'Tomatoes', quantity: 5, image: 'https://via.placeholder.com/40x40/F44336/FFFFFF?text=T' },
-        { name: 'Potatoes', quantity: 10, image: 'https://via.placeholder.com/40x40/8BC34A/FFFFFF?text=P' },
-        { name: 'Onions', quantity: 3, image: 'https://via.placeholder.com/40x40/9C27B0/FFFFFF?text=O' }
-      ],
-      rating: 5,
-      deliveredDate: '23 Sept, 2025'
-    },
-    {
-      id: 'ORD002',
-      date: '24 Sept, 2025',
-      status: 'In Transit',
-      total: 280,
-      vendor: {
-        name: 'Organic Harvest Co.',
-        location: 'Lajpat Nagar, Delhi',
-        image: 'https://via.placeholder.com/60x60/FF9800/FFFFFF?text=OH'
-      },
-      items: [
-        { name: 'Carrots', quantity: 4, image: 'https://via.placeholder.com/40x40/FF9800/FFFFFF?text=C' },
-        { name: 'Beans', quantity: 2, image: 'https://via.placeholder.com/40x40/4CAF50/FFFFFF?text=B' }
-      ],
-      estimatedDelivery: '26 Sept, 2025'
-    },
-    {
-      id: 'ORD003',
-      date: '23 Sept, 2025',
-      status: 'Processing',
-      total: 350,
-      vendor: {
-        name: 'Fresh Farm Direct',
-        location: 'Karol Bagh, Delhi',
-        image: 'https://via.placeholder.com/60x60/2196F3/FFFFFF?text=FF'
-      },
-      items: [
-        { name: 'Corn', quantity: 6, image: 'https://via.placeholder.com/40x40/FFC107/FFFFFF?text=C' },
-        { name: 'Spinach', quantity: 2, image: 'https://via.placeholder.com/40x40/4CAF50/FFFFFF?text=S' }
-      ]
-    },
-    {
-      id: 'ORD004',
-      date: '20 Sept, 2025',
-      status: 'Delivered',
-      total: 520,
-      vendor: {
-        name: 'Green Valley Farms',
-        location: 'Punjabi Bagh, Delhi',
-        image: 'https://via.placeholder.com/60x60/4CAF50/FFFFFF?text=GV'
-      },
-      items: [
-        { name: 'Cauliflower', quantity: 3, image: 'https://via.placeholder.com/40x40/FFF/666?text=CF' },
-        { name: 'Broccoli', quantity: 2, image: 'https://via.placeholder.com/40x40/4CAF50/FFFFFF?text=BR' },
-        { name: 'Capsicum', quantity: 4, image: 'https://via.placeholder.com/40x40/4CAF50/FFFFFF?text=CP' }
-      ],
-      rating: 4,
-      deliveredDate: '21 Sept, 2025'
-    },
-    {
-      id: 'ORD005',
-      date: '18 Sept, 2025',
-      status: 'Cancelled',
-      total: 180,
-      vendor: {
-        name: 'Local Farmers Market',
-        location: 'Rohini, Delhi',
-        image: 'https://via.placeholder.com/60x60/9E9E9E/FFFFFF?text=LF'
-      },
-      items: [
-        { name: 'Lettuce', quantity: 2, image: 'https://via.placeholder.com/40x40/4CAF50/FFFFFF?text=L' }
-      ],
-      cancelReason: 'Product not available'
-    },
-    {
-      id: 'ORD006',
-      date: '15 Sept, 2025',
-      status: 'Delivered',
-      total: 390,
-      vendor: {
-        name: 'Organic Harvest Co.',
-        location: 'Lajpat Nagar, Delhi',
-        image: 'https://via.placeholder.com/60x60/FF9800/FFFFFF?text=OH'
-      },
-      items: [
-        { name: 'Apples', quantity: 5, image: 'https://via.placeholder.com/40x40/F44336/FFFFFF?text=A' },
-        { name: 'Bananas', quantity: 3, image: 'https://via.placeholder.com/40x40/FFC107/FFFFFF?text=B' }
-      ],
-      rating: 5,
-      deliveredDate: '16 Sept, 2025'
+  // Load orders when screen focuses
+  useFocusEffect(
+    React.useCallback(() => {
+      loadOrders()
+    }, [])
+  )
+
+  // Load orders from backend
+  const loadOrders = async () => {
+    try {
+      setLoading(true)
+      console.log('🔄 Loading orders...')
+      
+      const fetchedOrders = await OrderService.getMyOrders()
+      console.log(`✅ Fetched ${fetchedOrders.length} orders from backend`)
+      
+      if (fetchedOrders.length > 0) {
+        console.log('First order raw data:', JSON.stringify(fetchedOrders[0], null, 2))
+      }
+      
+      // Format orders for display
+      const formattedOrders = fetchedOrders.map(order => 
+        OrderService.formatOrderForDisplay(order)
+      )
+      
+      if (formattedOrders.length > 0) {
+        console.log('First order formatted:', JSON.stringify(formattedOrders[0], null, 2))
+      }
+      
+      setOrders(formattedOrders)
+      console.log(`📦 Set ${formattedOrders.length} orders in state`)
+
+      // Load stats
+      const stats = await OrderService.getOrderStats()
+      setOrderStats(stats)
+    } catch (error) {
+      console.error('❌ Error loading orders:', error)
+      Alert.alert('Error', 'Failed to load orders. Please try again.')
+    } finally {
+      setLoading(false)
     }
-  ]
+  }
 
   const filterCounts = {
     all: orders.length,
@@ -287,28 +232,70 @@ const COrders = () => {
     : orders.filter(order => order.status.toLowerCase() === activeFilter)
 
   const handleOrderPress = (order) => {
-    Alert.alert('Order Details', `Viewing details for Order #${order.id}`)
+    navigation.navigate('COrderDetails', { orderId: order.id })
   }
 
   const handleTrackOrder = (order) => {
-    Alert.alert('Track Order', `Tracking Order #${order.id}`)
+    // Navigate to tracking screen or show tracking info
+    Alert.alert(
+      'Track Order',
+      `Order #${order.orderId} is ${order.status.toLowerCase()}.\n\n${
+        order.estimatedDelivery 
+          ? `Estimated delivery: ${new Date(order.estimatedDelivery).toLocaleDateString('en-IN')}`
+          : 'Delivery date not available'
+      }`
+    )
   }
 
-  const handleReorder = (order) => {
-    Alert.alert('Reorder', `Reordering items from Order #${order.id}`)
+  const handleReorder = async (order) => {
+    Alert.alert(
+      'Reorder Items',
+      `Would you like to reorder items from Order #${order.orderId}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reorder',
+          onPress: () => {
+            // Navigate to cart with order items
+            Alert.alert('Success', 'Items added to cart!')
+          }
+        }
+      ]
+    )
   }
 
   const handleSupport = (order) => {
-    Alert.alert('Support', `Getting support for Order #${order.id}`)
+    navigation.navigate('COrderMessages', { orderId: order.id })
   }
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setRefreshing(true)
-    // Simulate API call
-    setTimeout(() => {
-      setRefreshing(false)
-      Alert.alert('Refreshed', 'Order history has been updated')
-    }, 2000)
+    await loadOrders()
+    setRefreshing(false)
+  }
+
+  // Show loading spinner on initial load
+  if (loading && orders.length === 0) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Icon name="ArrowLeft" size={24} color="white" />
+          </TouchableOpacity>
+          
+          <View style={styles.headerTitle}>
+            <Text style={styles.headerTitleText}>My Orders</Text>
+          </View>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2196F3" />
+          <Text style={styles.loadingText}>Loading your orders...</Text>
+        </View>
+      </View>
+    )
   }
 
   return (
@@ -340,20 +327,25 @@ const COrders = () => {
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={styles.summaryCard}>
             <Icon name="Package" size={24} color="#2196F3" />
-            <Text style={styles.summaryNumber}>{orders.length}</Text>
+            <Text style={styles.summaryNumber}>
+              {orderStats?.totalOrders || orders.length}
+            </Text>
             <Text style={styles.summaryLabel}>Total Orders</Text>
           </View>
           
           <View style={styles.summaryCard}>
             <Icon name="Check" size={24} color="#4CAF50" />
-            <Text style={styles.summaryNumber}>{filterCounts.delivered}</Text>
+            <Text style={styles.summaryNumber}>
+              {orderStats?.byStatus?.delivered || filterCounts.delivered}
+            </Text>
             <Text style={styles.summaryLabel}>Delivered</Text>
           </View>
           
           <View style={styles.summaryCard}>
             <Icon name="Clock" size={24} color="#FF9800" />
             <Text style={styles.summaryNumber}>
-              {filterCounts.processing + filterCounts['in transit']}
+              {(orderStats?.byStatus?.confirmed || 0) + (orderStats?.byStatus?.in_transit || 0) ||
+                (filterCounts.processing + filterCounts['in transit'])}
             </Text>
             <Text style={styles.summaryLabel}>In Progress</Text>
           </View>
@@ -361,7 +353,7 @@ const COrders = () => {
           <View style={styles.summaryCard}>
             <Icon name="DollarSign" size={24} color="#9C27B0" />
             <Text style={styles.summaryNumber}>
-              ₹{orders.reduce((total, order) => total + order.total, 0)}
+              ₹{orderStats?.totalAmount || orders.reduce((total, order) => total + order.total, 0)}
             </Text>
             <Text style={styles.summaryLabel}>Total Spent</Text>
           </View>
@@ -735,6 +727,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     paddingHorizontal: 40,
+  },
+
+  // Loading State
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 16,
   },
 })
 
